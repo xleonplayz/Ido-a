@@ -58,6 +58,14 @@ class PulsedDataAnalysisLogic(LogicBase):
             default_data_storage_type: 'text'
         connect:
             pulseanalyzer: 'pulseanalyzer'
+    
+    This module supports direct loading of individual file types through these methods:
+    - load_pulsed_file: Load a pulsed measurement file (signal data)
+    - load_raw_file: Load a raw timetrace file (raw data)
+    - load_laser_file: Load a laser pulses file (laser data)
+    
+    This simplifies the workflow by allowing users to load files individually without
+    relying on automatic detection of related files.
     """
     
     # No connectors needed as we instantiate helpers directly
@@ -150,9 +158,215 @@ class PulsedDataAnalysisLogic(LogicBase):
         self.state_histogram = None
         self.state_statistics = {}
     
+    def load_pulsed_file(self, file_path):
+        """
+        Load data specifically from a pulsed measurement file
+        
+        @param str file_path: path to the pulsed measurement file to load
+        @return dict: metadata of the loaded file
+        """
+        if not os.path.isfile(file_path):
+            self.log.error(f"Pulsed measurement file does not exist: {file_path}")
+            return
+            
+        self.log.info(f"Loading pulsed measurement file: {file_path}")
+        self._initialize_data_containers()
+        self.current_file_path = file_path
+        
+        # Determine file type based on extension
+        file_extension = os.path.splitext(file_path)[1].lower()
+        
+        if file_extension == '.dat':
+            storage = TextDataStorage()
+            self.current_file_type = 'text'
+        elif file_extension == '.csv':
+            storage = CsvDataStorage()
+            self.current_file_type = 'csv'
+        elif file_extension == '.npy':
+            storage = NpyDataStorage()
+            self.current_file_type = 'npy'
+        else:
+            self.log.error(f"Unsupported file type: {file_extension}")
+            return
+            
+        try:
+            # Load the pulsed measurement file
+            data, metadata = storage.load_data(file_path)
+            self.log.info(f"Successfully loaded pulsed measurement data from {file_path}")
+            
+            # Set as signal data (pulsed measurement data)
+            self.signal_data = data.T  # Transpose to match expected format
+            self.metadata = metadata
+            
+            # Add to recent files list
+            if file_path in self._recent_files:
+                self._recent_files.remove(file_path)
+            self._recent_files.insert(0, file_path)
+            self._recent_files = self._recent_files[:10]  # Limit to 10
+            
+            # Emit signal with loaded data info
+            data_info = {
+                'has_raw_data': self.raw_data is not None,
+                'has_laser_data': self.laser_data is not None,
+                'has_signal_data': self.signal_data is not None,
+                'file_path': file_path,
+                'metadata': self.metadata
+            }
+            
+            self.log.info(f"Pulsed measurement file loaded successfully.")
+            self.sigDataLoaded.emit(data_info)
+            return self.metadata
+            
+        except Exception as e:
+            self.log.error(f"Error loading pulsed measurement file {file_path}: {str(e)}")
+            import traceback
+            self.log.error(f"Traceback: {traceback.format_exc()}")
+            return None
+            
+    def load_raw_file(self, file_path):
+        """
+        Load data specifically from a raw timetrace file
+        
+        @param str file_path: path to the raw timetrace file to load
+        @return dict: metadata of the loaded file
+        """
+        if not os.path.isfile(file_path):
+            self.log.error(f"Raw timetrace file does not exist: {file_path}")
+            return
+            
+        self.log.info(f"Loading raw timetrace file: {file_path}")
+        # Don't initialize containers, we want to keep other data if already loaded
+        self.current_file_path = file_path
+        
+        # Determine file type based on extension
+        file_extension = os.path.splitext(file_path)[1].lower()
+        
+        if file_extension == '.dat':
+            storage = TextDataStorage()
+            self.current_file_type = 'text'
+        elif file_extension == '.csv':
+            storage = CsvDataStorage()
+            self.current_file_type = 'csv'
+        elif file_extension == '.npy':
+            storage = NpyDataStorage()
+            self.current_file_type = 'npy'
+        else:
+            self.log.error(f"Unsupported file type: {file_extension}")
+            return
+            
+        try:
+            # Load the raw timetrace file
+            data, metadata = storage.load_data(file_path)
+            self.log.info(f"Successfully loaded raw timetrace data from {file_path}")
+            
+            # Set as raw data
+            self.raw_data = data.squeeze()
+            
+            # Update metadata
+            if not self.metadata:
+                self.metadata = metadata
+            else:
+                self.metadata.update(metadata)
+            
+            # Add to recent files list
+            if file_path in self._recent_files:
+                self._recent_files.remove(file_path)
+            self._recent_files.insert(0, file_path)
+            self._recent_files = self._recent_files[:10]  # Limit to 10
+            
+            # Emit signal with loaded data info
+            data_info = {
+                'has_raw_data': self.raw_data is not None,
+                'has_laser_data': self.laser_data is not None,
+                'has_signal_data': self.signal_data is not None,
+                'file_path': file_path,
+                'metadata': self.metadata
+            }
+            
+            self.log.info(f"Raw timetrace file loaded successfully.")
+            self.sigDataLoaded.emit(data_info)
+            return self.metadata
+            
+        except Exception as e:
+            self.log.error(f"Error loading raw timetrace file {file_path}: {str(e)}")
+            import traceback
+            self.log.error(f"Traceback: {traceback.format_exc()}")
+            return None
+            
+    def load_laser_file(self, file_path):
+        """
+        Load data specifically from a laser pulses file
+        
+        @param str file_path: path to the laser pulses file to load
+        @return dict: metadata of the loaded file
+        """
+        if not os.path.isfile(file_path):
+            self.log.error(f"Laser pulses file does not exist: {file_path}")
+            return
+            
+        self.log.info(f"Loading laser pulses file: {file_path}")
+        # Don't initialize containers, we want to keep other data if already loaded
+        self.current_file_path = file_path
+        
+        # Determine file type based on extension
+        file_extension = os.path.splitext(file_path)[1].lower()
+        
+        if file_extension == '.dat':
+            storage = TextDataStorage()
+            self.current_file_type = 'text'
+        elif file_extension == '.csv':
+            storage = CsvDataStorage()
+            self.current_file_type = 'csv'
+        elif file_extension == '.npy':
+            storage = NpyDataStorage()
+            self.current_file_type = 'npy'
+        else:
+            self.log.error(f"Unsupported file type: {file_extension}")
+            return
+            
+        try:
+            # Load the laser pulses file
+            data, metadata = storage.load_data(file_path)
+            self.log.info(f"Successfully loaded laser pulses data from {file_path}")
+            
+            # Set as laser data
+            self.laser_data = data
+            
+            # Update metadata
+            if not self.metadata:
+                self.metadata = metadata
+            else:
+                self.metadata.update(metadata)
+            
+            # Add to recent files list
+            if file_path in self._recent_files:
+                self._recent_files.remove(file_path)
+            self._recent_files.insert(0, file_path)
+            self._recent_files = self._recent_files[:10]  # Limit to 10
+            
+            # Emit signal with loaded data info
+            data_info = {
+                'has_raw_data': self.raw_data is not None,
+                'has_laser_data': self.laser_data is not None,
+                'has_signal_data': self.signal_data is not None,
+                'file_path': file_path,
+                'metadata': self.metadata
+            }
+            
+            self.log.info(f"Laser pulses file loaded successfully.")
+            self.sigDataLoaded.emit(data_info)
+            return self.metadata
+            
+        except Exception as e:
+            self.log.error(f"Error loading laser pulses file {file_path}: {str(e)}")
+            import traceback
+            self.log.error(f"Traceback: {traceback.format_exc()}")
+            return None
+    
     def load_data(self, file_path):
         """
-        Load data from a saved pulsed measurement file
+        Legacy method to load data from a saved pulsed measurement file
+        and attempt to find related files automatically.
         
         @param str file_path: path to the file to load
         @return dict: metadata of the loaded file
@@ -229,6 +443,34 @@ class PulsedDataAnalysisLogic(LogicBase):
             self.log.debug(f"Raw basename: {basename}")
             self.log.debug(f"Directory path: {dirname}")
             
+            # Print the hexdump of the filename for debugging
+            hex_dump = ' '.join([f"{ord(c):02x}" for c in basename])
+            self.log.debug(f"Filename hex: {hex_dump}")
+            
+            # Check for spaces in filenames - this can cause issues
+            if ' ' in basename:
+                self.log.warning(f"Filename contains spaces which may cause issues: '{basename}'")
+                # Note the positions of spaces for debugging
+                space_positions = [i for i, char in enumerate(basename) if char == ' ']
+                self.log.debug(f"Spaces found at positions: {space_positions}")
+                
+                # Try to normalize spaces around suffixes
+                basename_normalized = basename
+                for suffix in ["_pulsed_measurement", "_raw_timetrace", "_laser_pulses"]:
+                    # Fix case with space before the suffix
+                    if f" {suffix}" in basename_normalized:
+                        basename_normalized = basename_normalized.replace(f" {suffix}", suffix)
+                        self.log.debug(f"Normalized space before suffix: {suffix}")
+                    
+                    # Fix case with space after the suffix
+                    if f"{suffix} " in basename_normalized:
+                        basename_normalized = basename_normalized.replace(f"{suffix} ", suffix)
+                        self.log.debug(f"Normalized space after suffix: {suffix}")
+                
+                if basename_normalized != basename:
+                    self.log.info(f"Normalized filename for processing: '{basename_normalized}'")
+                    basename = basename_normalized
+            
             # Try to get base name without any of the special suffixes
             base_name = basename
             special_suffixes = ["_pulsed_measurement", "_raw_timetrace", "_laser_pulses"]
@@ -242,24 +484,75 @@ class PulsedDataAnalysisLogic(LogicBase):
                 self.log.debug(f"Found suffixes in filename: {found_suffixes}")
             else:
                 self.log.debug(f"No standard suffixes found in filename. Will try to detect related files anyway.")
+                
+                # Check for variations with spaces or special characters
+                basename_lower = basename.lower()
+                for suffix in special_suffixes:
+                    suffix_no_underscore = suffix[1:]  # Remove the leading underscore
+                    
+                    # Check for suffix without underscore
+                    if suffix_no_underscore in basename_lower:
+                        self.log.warning(f"Found suffix without underscore: '{suffix_no_underscore}' instead of '{suffix}'")
+                        # Try to fix the base name by removing this variation
+                        idx = basename_lower.find(suffix_no_underscore)
+                        if idx > 0:
+                            potential_base = basename[:idx]
+                            self.log.info(f"Extracted potential base name: '{potential_base}'")
+                            base_name = potential_base
+                            break
             
             # Special handling for filenames with unusual characters or encoding issues
             self.log.debug(f"Cleaned base name: {base_name}")
+            
+            # Check for special characters that might cause issues
+            special_chars = []
             for i, char in enumerate(base_name):
-                if ord(char) > 127:
-                    self.log.warning(f"Non-ASCII character at position {i} in filename: {char} (code {ord(char)})")
+                if not char.isalnum() and char not in "-_. ":
+                    special_chars.append((i, char, ord(char)))
+                    self.log.warning(f"Special character at position {i} in filename: '{char}' (code {ord(char)})")
+                elif ord(char) > 127:
+                    special_chars.append((i, char, ord(char)))
+                    self.log.warning(f"Non-ASCII character at position {i} in filename: '{char}' (code {ord(char)})")
+            
+            if special_chars:
+                self.log.debug(f"Special characters found: {special_chars}")
+                
+                # Try to create a clean base name
+                clean_base = ''.join(c if (c.isalnum() or c in "-_. ") and ord(c) < 128 else '_' for c in base_name)
+                if clean_base != base_name:
+                    self.log.info(f"Created clean base name: '{clean_base}' (original: '{base_name}')")
+                    alt_base_name = clean_base
+                else:
+                    alt_base_name = base_name
+            else:
+                alt_base_name = base_name
+            
+            # Create a list of potential base names to try
+            potential_base_names = [base_name]
+            if alt_base_name != base_name:
+                potential_base_names.append(alt_base_name)
+            
+            # Strip trailing/leading spaces from base names
+            potential_base_names = [bn.strip() for bn in potential_base_names]
             
             # Check if the base name contains other possible variations of the suffixes
             possible_suffix_variations = {
-                "_pulsed_measurement": ["_pulsed_measurement", "_pulsedmeasurement", "_pulsed", "_measurement"],
-                "_raw_timetrace": ["_raw_timetrace", "_rawtimetrace", "_raw", "_timetrace"],
-                "_laser_pulses": ["_laser_pulses", "_laserpulses", "_laser"]
+                "_pulsed_measurement": ["_pulsed_measurement", "_pulsedmeasurement", "_pulsed measurement", "pulsed_measurement", "_pulsed", "_measurement"],
+                "_raw_timetrace": ["_raw_timetrace", "_rawtimetrace", "_raw timetrace", "raw_timetrace", "_raw", "_timetrace"],
+                "_laser_pulses": ["_laser_pulses", "_laserpulses", "_laser pulses", "laser_pulses", "_laser"]
             }
             
+            variation_found = False
             for standard, variations in possible_suffix_variations.items():
                 for var in variations:
                     if var != standard and var in basename:
                         self.log.warning(f"Found possible suffix variation: '{var}' instead of '{standard}'")
+                        variation_found = True
+                        
+                        # Try to create another potential base name by removing this variation
+                        potential_base = basename.replace(var, "")
+                        self.log.info(f"Created potential base name by removing variation: '{potential_base}'")
+                        potential_base_names.append(potential_base.strip())
             
             # File extensions to try
             extensions = [file_extension]  # Start with the same extension as the loaded file
@@ -269,133 +562,303 @@ class PulsedDataAnalysisLogic(LogicBase):
                 extensions.append('.csv')
             if file_extension != '.npy':
                 extensions.append('.npy')
+                
+            # Log all the potential base names we'll try
+            self.log.debug(f"Will try the following base names: {potential_base_names}")
+            self.log.debug(f"Will try the following extensions: {extensions}")
             
             self.log.debug(f"Will try the following extensions: {extensions}")
             
             # Try to find related files with all possible extensions
-            self.log.info(f"Looking for related files with base name: {base_name}")
+            self.log.info(f"Looking for related files with multiple base name options")
+            
+            # Define a helper function to try loading a file with different storage types
+            def try_load_file(file_path, file_type):
+                if not os.path.isfile(file_path) or file_path == self.current_file_path:
+                    return None, None
+                
+                self.log.info(f"Found matching file, attempting to load: {file_path}")
+                
+                # Try to determine the correct storage type based on extension
+                ext = os.path.splitext(file_path)[1].lower()
+                if ext == '.dat' and self.current_file_type != 'text':
+                    temp_storage = TextDataStorage()
+                    self.log.debug("Using TextDataStorage for this file")
+                elif ext == '.csv' and self.current_file_type != 'csv':
+                    temp_storage = CsvDataStorage()
+                    self.log.debug("Using CsvDataStorage for this file")
+                elif ext == '.npy' and self.current_file_type != 'npy':
+                    temp_storage = NpyDataStorage()
+                    self.log.debug("Using NpyDataStorage for this file")
+                else:
+                    temp_storage = storage
+                
+                try:
+                    data, metadata = temp_storage.load_data(file_path)
+                    self.log.debug(f"Successfully loaded {file_type} data with shape: {data.shape}")
+                    return data, metadata
+                except Exception as e:
+                    self.log.error(f"Error loading {file_type} file {file_path}: {str(e)}")
+                    import traceback
+                    self.log.debug(f"Traceback for file loading error: {traceback.format_exc()}")
+                    return None, None
+            
+            # Helper function to check for any matching files with the given pattern
+            def find_files_matching_pattern(dirname, pattern):
+                matching_files = []
+                import glob
+                # Use glob to find all matching files
+                for matching_file in glob.glob(os.path.join(dirname, pattern)):
+                    matching_files.append(matching_file)
+                return matching_files
             
             # If we don't have pulsed measurement data yet, try to find it
             if self.signal_data is None:
                 self.log.debug("No signal data loaded yet, looking for pulsed measurement files")
-                for ext in extensions:
-                    pulsed_file_path = os.path.join(dirname, base_name + "_pulsed_measurement" + ext)
-                    self.log.debug(f"Checking if file exists: {pulsed_file_path}")
-                    if os.path.isfile(pulsed_file_path) and pulsed_file_path != file_path:
-                        try:
-                            self.log.info(f"Found pulsed measurement file, attempting to load: {pulsed_file_path}")
+                signal_data_loaded = False
+                
+                # First try the standard format with our potential base names
+                for base in potential_base_names:
+                    if signal_data_loaded:
+                        break
+                        
+                    for ext in extensions:
+                        if signal_data_loaded:
+                            break
                             
-                            # Try a different storage type if needed based on extension
-                            if ext == '.dat' and self.current_file_type != 'text':
-                                temp_storage = TextDataStorage()
-                                self.log.debug("Switching to TextDataStorage for this file")
-                            elif ext == '.csv' and self.current_file_type != 'csv':
-                                temp_storage = CsvDataStorage()
-                                self.log.debug("Switching to CsvDataStorage for this file")
-                            elif ext == '.npy' and self.current_file_type != 'npy':
-                                temp_storage = NpyDataStorage()
-                                self.log.debug("Switching to NpyDataStorage for this file")
-                            else:
-                                temp_storage = storage
-                                
-                            data, metadata = temp_storage.load_data(pulsed_file_path)
-                            self.log.debug(f"Loaded pulsed data with shape: {data.shape}")
-                            
+                        # Try standard naming format
+                        pulsed_file_path = os.path.join(dirname, base + "_pulsed_measurement" + ext)
+                        data, metadata = try_load_file(pulsed_file_path, "pulsed measurement")
+                        
+                        if data is not None:
                             self.signal_data = data.T
                             if not self.metadata:
                                 self.metadata = metadata
                             else:
                                 self.metadata.update(metadata)
                             self.log.info(f"Successfully loaded pulsed measurement data from {pulsed_file_path}")
+                            signal_data_loaded = True
                             break
-                        except Exception as e:
-                            self.log.error(f"Error loading pulsed file {pulsed_file_path}: {str(e)}")
-                            import traceback
-                            self.log.debug(f"Traceback for pulsed file loading error: {traceback.format_exc()}")
                 
-                if self.signal_data is None:
+                # If still not found, try alternative naming formats
+                if not signal_data_loaded:
+                    # Try with variations in naming convention
+                    for base in potential_base_names:
+                        if signal_data_loaded:
+                            break
+                            
+                        # Try variations of the suffix
+                        for suffix_var in ["_pulsed_measurement", "_pulsedmeasurement", "_pulsed measurement", 
+                                          "pulsed_measurement", " _pulsed_measurement", "_pulsed_measurement "]:
+                            if signal_data_loaded:
+                                break
+                                
+                            for ext in extensions:
+                                pulsed_file_path = os.path.join(dirname, base + suffix_var + ext)
+                                data, metadata = try_load_file(pulsed_file_path, "pulsed measurement")
+                                
+                                if data is not None:
+                                    self.signal_data = data.T
+                                    if not self.metadata:
+                                        self.metadata = metadata
+                                    else:
+                                        self.metadata.update(metadata)
+                                    self.log.info(f"Successfully loaded pulsed measurement data from {pulsed_file_path}")
+                                    signal_data_loaded = True
+                                    break
+                
+                # If still not found, try using glob to find any files that might match
+                if not signal_data_loaded:
+                    self.log.debug("Trying to find pulsed measurement files using pattern matching")
+                    for base in potential_base_names:
+                        if signal_data_loaded:
+                            break
+                            
+                        # Look for any file containing both the base name and pulsed_measurement
+                        matching_files = find_files_matching_pattern(dirname, f"*{base}*pulsed*measurement*.*")
+                        matching_files.extend(find_files_matching_pattern(dirname, f"*pulsed*measurement*{base}*.*"))
+                        
+                        for match_file in matching_files:
+                            if match_file != file_path:  # Don't try to load the current file again
+                                data, metadata = try_load_file(match_file, "pulsed measurement")
+                                
+                                if data is not None:
+                                    self.signal_data = data.T
+                                    if not self.metadata:
+                                        self.metadata = metadata
+                                    else:
+                                        self.metadata.update(metadata)
+                                    self.log.info(f"Successfully loaded pulsed measurement data from {match_file}")
+                                    signal_data_loaded = True
+                                    break
+                
+                if not signal_data_loaded:
                     self.log.warning("Failed to find or load any pulsed measurement data")
             
             # If we don't have raw data yet, try to find it
             if self.raw_data is None:
                 self.log.debug("No raw data loaded yet, looking for raw timetrace files")
-                for ext in extensions:
-                    raw_file_path = os.path.join(dirname, base_name + "_raw_timetrace" + ext)
-                    self.log.debug(f"Checking if file exists: {raw_file_path}")
-                    if os.path.isfile(raw_file_path) and raw_file_path != file_path:
-                        try:
-                            self.log.info(f"Found raw timetrace file, attempting to load: {raw_file_path}")
-                            
-                            # Try a different storage type if needed based on extension
-                            if ext == '.dat' and self.current_file_type != 'text':
-                                temp_storage = TextDataStorage()
-                                self.log.debug("Switching to TextDataStorage for this file")
-                            elif ext == '.csv' and self.current_file_type != 'csv':
-                                temp_storage = CsvDataStorage()
-                                self.log.debug("Switching to CsvDataStorage for this file")
-                            elif ext == '.npy' and self.current_file_type != 'npy':
-                                temp_storage = NpyDataStorage()
-                                self.log.debug("Switching to NpyDataStorage for this file")
-                            else:
-                                temp_storage = storage
-                            
-                            raw_data, raw_metadata = temp_storage.load_data(raw_file_path)
-                            self.log.debug(f"Loaded raw data with shape: {raw_data.shape}")
-                            
-                            self.raw_data = raw_data.squeeze()
-                            if not self.metadata:
-                                self.metadata = raw_metadata
-                            else:
-                                self.metadata.update(raw_metadata)
-                            self.log.info(f"Successfully loaded raw data from {raw_file_path}")
-                            break
-                        except Exception as e:
-                            self.log.error(f"Error loading raw file {raw_file_path}: {str(e)}")
-                            import traceback
-                            self.log.debug(f"Traceback for raw file loading error: {traceback.format_exc()}")
+                raw_data_loaded = False
                 
-                if self.raw_data is None:
+                # First try the standard format with our potential base names
+                for base in potential_base_names:
+                    if raw_data_loaded:
+                        break
+                        
+                    for ext in extensions:
+                        if raw_data_loaded:
+                            break
+                            
+                        # Try standard naming format
+                        raw_file_path = os.path.join(dirname, base + "_raw_timetrace" + ext)
+                        data, metadata = try_load_file(raw_file_path, "raw timetrace")
+                        
+                        if data is not None:
+                            self.raw_data = data.squeeze()
+                            if not self.metadata:
+                                self.metadata = metadata
+                            else:
+                                self.metadata.update(metadata)
+                            self.log.info(f"Successfully loaded raw data from {raw_file_path}")
+                            raw_data_loaded = True
+                            break
+                
+                # If still not found, try alternative naming formats
+                if not raw_data_loaded:
+                    # Try with variations in naming convention
+                    for base in potential_base_names:
+                        if raw_data_loaded:
+                            break
+                            
+                        # Try variations of the suffix
+                        for suffix_var in ["_raw_timetrace", "_rawtimetrace", "_raw timetrace", 
+                                          "raw_timetrace", " _raw_timetrace", "_raw_timetrace "]:
+                            if raw_data_loaded:
+                                break
+                                
+                            for ext in extensions:
+                                raw_file_path = os.path.join(dirname, base + suffix_var + ext)
+                                data, metadata = try_load_file(raw_file_path, "raw timetrace")
+                                
+                                if data is not None:
+                                    self.raw_data = data.squeeze()
+                                    if not self.metadata:
+                                        self.metadata = metadata
+                                    else:
+                                        self.metadata.update(metadata)
+                                    self.log.info(f"Successfully loaded raw data from {raw_file_path}")
+                                    raw_data_loaded = True
+                                    break
+                
+                # If still not found, try using glob to find any files that might match
+                if not raw_data_loaded:
+                    self.log.debug("Trying to find raw timetrace files using pattern matching")
+                    for base in potential_base_names:
+                        if raw_data_loaded:
+                            break
+                            
+                        # Look for any file containing both the base name and raw_timetrace
+                        matching_files = find_files_matching_pattern(dirname, f"*{base}*raw*timetrace*.*")
+                        matching_files.extend(find_files_matching_pattern(dirname, f"*raw*timetrace*{base}*.*"))
+                        
+                        for match_file in matching_files:
+                            if match_file != file_path:  # Don't try to load the current file again
+                                data, metadata = try_load_file(match_file, "raw timetrace")
+                                
+                                if data is not None:
+                                    self.raw_data = data.squeeze()
+                                    if not self.metadata:
+                                        self.metadata = metadata
+                                    else:
+                                        self.metadata.update(metadata)
+                                    self.log.info(f"Successfully loaded raw data from {match_file}")
+                                    raw_data_loaded = True
+                                    break
+                
+                if not raw_data_loaded:
                     self.log.warning("Failed to find or load any raw timetrace data")
             
             # If we don't have laser data yet, try to find it
             if self.laser_data is None:
                 self.log.debug("No laser data loaded yet, looking for laser pulses files")
-                for ext in extensions:
-                    laser_file_path = os.path.join(dirname, base_name + "_laser_pulses" + ext)
-                    self.log.debug(f"Checking if file exists: {laser_file_path}")
-                    if os.path.isfile(laser_file_path) and laser_file_path != file_path:
-                        try:
-                            self.log.info(f"Found laser pulses file, attempting to load: {laser_file_path}")
-                            
-                            # Try a different storage type if needed based on extension
-                            if ext == '.dat' and self.current_file_type != 'text':
-                                temp_storage = TextDataStorage()
-                                self.log.debug("Switching to TextDataStorage for this file")
-                            elif ext == '.csv' and self.current_file_type != 'csv':
-                                temp_storage = CsvDataStorage()
-                                self.log.debug("Switching to CsvDataStorage for this file")
-                            elif ext == '.npy' and self.current_file_type != 'npy':
-                                temp_storage = NpyDataStorage()
-                                self.log.debug("Switching to NpyDataStorage for this file")
-                            else:
-                                temp_storage = storage
-                            
-                            laser_data, laser_metadata = temp_storage.load_data(laser_file_path)
-                            self.log.debug(f"Loaded laser data with shape: {laser_data.shape}")
-                            
-                            self.laser_data = laser_data
-                            if not self.metadata:
-                                self.metadata = laser_metadata
-                            else:
-                                self.metadata.update(laser_metadata)
-                            self.log.info(f"Successfully loaded laser data from {laser_file_path}")
-                            break
-                        except Exception as e:
-                            self.log.error(f"Error loading laser file {laser_file_path}: {str(e)}")
-                            import traceback
-                            self.log.debug(f"Traceback for laser file loading error: {traceback.format_exc()}")
+                laser_data_loaded = False
                 
-                if self.laser_data is None:
+                # First try the standard format with our potential base names
+                for base in potential_base_names:
+                    if laser_data_loaded:
+                        break
+                        
+                    for ext in extensions:
+                        if laser_data_loaded:
+                            break
+                            
+                        # Try standard naming format
+                        laser_file_path = os.path.join(dirname, base + "_laser_pulses" + ext)
+                        data, metadata = try_load_file(laser_file_path, "laser pulses")
+                        
+                        if data is not None:
+                            self.laser_data = data
+                            if not self.metadata:
+                                self.metadata = metadata
+                            else:
+                                self.metadata.update(metadata)
+                            self.log.info(f"Successfully loaded laser data from {laser_file_path}")
+                            laser_data_loaded = True
+                            break
+                
+                # If still not found, try alternative naming formats
+                if not laser_data_loaded:
+                    # Try with variations in naming convention
+                    for base in potential_base_names:
+                        if laser_data_loaded:
+                            break
+                            
+                        # Try variations of the suffix
+                        for suffix_var in ["_laser_pulses", "_laserpulses", "_laser pulses", 
+                                          "laser_pulses", " _laser_pulses", "_laser_pulses "]:
+                            if laser_data_loaded:
+                                break
+                                
+                            for ext in extensions:
+                                laser_file_path = os.path.join(dirname, base + suffix_var + ext)
+                                data, metadata = try_load_file(laser_file_path, "laser pulses")
+                                
+                                if data is not None:
+                                    self.laser_data = data
+                                    if not self.metadata:
+                                        self.metadata = metadata
+                                    else:
+                                        self.metadata.update(metadata)
+                                    self.log.info(f"Successfully loaded laser data from {laser_file_path}")
+                                    laser_data_loaded = True
+                                    break
+                
+                # If still not found, try using glob to find any files that might match
+                if not laser_data_loaded:
+                    self.log.debug("Trying to find laser pulses files using pattern matching")
+                    for base in potential_base_names:
+                        if laser_data_loaded:
+                            break
+                            
+                        # Look for any file containing both the base name and laser_pulses
+                        matching_files = find_files_matching_pattern(dirname, f"*{base}*laser*pulses*.*")
+                        matching_files.extend(find_files_matching_pattern(dirname, f"*laser*pulses*{base}*.*"))
+                        
+                        for match_file in matching_files:
+                            if match_file != file_path:  # Don't try to load the current file again
+                                data, metadata = try_load_file(match_file, "laser pulses")
+                                
+                                if data is not None:
+                                    self.laser_data = data
+                                    if not self.metadata:
+                                        self.metadata = metadata
+                                    else:
+                                        self.metadata.update(metadata)
+                                    self.log.info(f"Successfully loaded laser data from {match_file}")
+                                    laser_data_loaded = True
+                                    break
+                
+                if not laser_data_loaded:
                     self.log.warning("Failed to find or load any laser pulses data")
             
             # Add to recent files list

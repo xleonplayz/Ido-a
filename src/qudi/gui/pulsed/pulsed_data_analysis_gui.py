@@ -78,7 +78,9 @@ class PulsedDataAnalysisGui(GuiBase):
     _data_selection_range = StatusVar(default=(0, 0))
     
     # Signals
-    sigOpenFile = QtCore.Signal(str)
+    sigOpenPulsedFile = QtCore.Signal(str)  # Changed to be specific to pulsed data
+    sigOpenRawFile = QtCore.Signal(str)  # New signal for raw data file
+    sigOpenLaserFile = QtCore.Signal(str)  # New signal for laser data file
     sigExtractLaserPulses = QtCore.Signal()
     sigAnalyzePulses = QtCore.Signal()
     sigSetThreshold = QtCore.Signal(float)
@@ -122,6 +124,9 @@ class PulsedDataAnalysisGui(GuiBase):
         # Initialize plots
         self._initialize_plots()
         
+        # Add the file selection buttons to the UI
+        self._add_file_selection_buttons()
+        
         # Create signal-slot connections
         self._create_ui_connections()
         self._connect_signals_to_logic()
@@ -136,6 +141,39 @@ class PulsedDataAnalysisGui(GuiBase):
         
         # Show window
         self.show()
+    
+    def _add_file_selection_buttons(self):
+        """Add the three file selection buttons to the UI"""
+        # Create a new widget to hold the file selection buttons
+        file_selection_widget = QtWidgets.QWidget()
+        file_selection_layout = QtWidgets.QHBoxLayout()
+        file_selection_widget.setLayout(file_selection_layout)
+        
+        # Create title label
+        title_label = QtWidgets.QLabel("Select Files Individually:")
+        file_selection_layout.addWidget(title_label)
+        
+        # Create the three buttons
+        self._pulsed_file_button = QtWidgets.QPushButton("Open Pulsed Measurement")
+        self._pulsed_file_button.setToolTip("Open a pulsed measurement file (_pulsed_measurement)")
+        file_selection_layout.addWidget(self._pulsed_file_button)
+        
+        self._raw_file_button = QtWidgets.QPushButton("Open Raw Data")
+        self._raw_file_button.setToolTip("Open a raw timetrace file (_raw_timetrace)")
+        file_selection_layout.addWidget(self._raw_file_button)
+        
+        self._laser_file_button = QtWidgets.QPushButton("Open Laser Pulses")
+        self._laser_file_button.setToolTip("Open a laser pulses file (_laser_pulses)")
+        file_selection_layout.addWidget(self._laser_file_button)
+        
+        # Add spacer to right-align the buttons
+        file_selection_layout.addItem(QtWidgets.QSpacerItem(40, 20, 
+                                       QtWidgets.QSizePolicy.Expanding, 
+                                       QtWidgets.QSizePolicy.Minimum))
+        
+        # Add the file selection widget to the main window
+        # Insert it after the data tab's vertical layout
+        self._mw.data_tab.layout().insertWidget(0, file_selection_widget)
     
     def on_deactivate(self):
         """Deactivate the module and clean up"""
@@ -204,6 +242,11 @@ class PulsedDataAnalysisGui(GuiBase):
         self._mw.extraction_settings_button.clicked.connect(self.show_extraction_settings)
         self._mw.analysis_settings_button.clicked.connect(self.show_analysis_settings)
         
+        # File selection buttons connections
+        self._pulsed_file_button.clicked.connect(self.open_pulsed_file_dialog)
+        self._raw_file_button.clicked.connect(self.open_raw_file_dialog)
+        self._laser_file_button.clicked.connect(self.open_laser_file_dialog)
+        
         # NV state settings connections
         self._mw.ms_minus1_radiobutton.toggled.connect(self.toggle_ms_state_display)
         self._mw.threshold_spinbox.valueChanged.connect(self.update_threshold_from_spinbox)
@@ -218,7 +261,9 @@ class PulsedDataAnalysisGui(GuiBase):
     def _connect_signals_to_logic(self):
         """Connect GUI signals to logic module methods"""
         # Connect GUI signals to logic signals
-        self.sigOpenFile.connect(self._analysis_logic().load_data)
+        self.sigOpenPulsedFile.connect(self._analysis_logic().load_pulsed_file)
+        self.sigOpenRawFile.connect(self._analysis_logic().load_raw_file)
+        self.sigOpenLaserFile.connect(self._analysis_logic().load_laser_file)
         self.sigExtractLaserPulses.connect(self._analysis_logic().extract_laser_pulses)
         self.sigAnalyzePulses.connect(self._analysis_logic().analyze_laser_pulses)
         self.sigSetThreshold.connect(self._analysis_logic().set_nv_threshold)
@@ -235,7 +280,9 @@ class PulsedDataAnalysisGui(GuiBase):
     def _disconnect_signals_from_logic(self):
         """Disconnect all signal-slot connections to the logic module"""
         # Disconnect GUI signals from logic signals
-        self.sigOpenFile.disconnect()
+        self.sigOpenPulsedFile.disconnect()
+        self.sigOpenRawFile.disconnect()
+        self.sigOpenLaserFile.disconnect()
         self.sigExtractLaserPulses.disconnect()
         self.sigAnalyzePulses.disconnect()
         self.sigSetThreshold.disconnect()
@@ -265,7 +312,19 @@ class PulsedDataAnalysisGui(GuiBase):
             menu.addAction(action)
     
     def open_file_dialog(self):
-        """Open a file dialog to select a file to load"""
+        """Open a file dialog to select a file to load (legacy method)"""
+        # Show message box suggesting the use of specific file buttons
+        response = QtWidgets.QMessageBox.question(
+            self._mw,
+            "Use Specific File Buttons",
+            "It's recommended to use the specific file buttons to load each file type.\n\n"
+            "Do you still want to open a generic file?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+        )
+        
+        if response == QtWidgets.QMessageBox.No:
+            return
+            
         # Get the initial directory
         initial_dir = self._default_save_path
         if not initial_dir or not os.path.isdir(initial_dir):
@@ -274,7 +333,7 @@ class PulsedDataAnalysisGui(GuiBase):
         # Open file dialog
         file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self._mw,
-            "Open Pulsed Measurement Data",
+            "Open Data File",
             initial_dir,
             "Data Files (*.dat *.csv *.npy);;All Files (*)"
         )
@@ -283,8 +342,116 @@ class PulsedDataAnalysisGui(GuiBase):
             # Update default save path
             self._default_save_path = os.path.dirname(file_path)
             
-            # Load file
-            self.sigOpenFile.emit(file_path)
+            # Determine file type and emit the appropriate signal
+            basename = os.path.basename(file_path).lower()
+            if "_pulsed_measurement" in basename:
+                self.sigOpenPulsedFile.emit(file_path)
+            elif "_raw_timetrace" in basename:
+                self.sigOpenRawFile.emit(file_path)
+            elif "_laser_pulses" in basename:
+                self.sigOpenLaserFile.emit(file_path)
+            else:
+                # If file type can't be determined from name, show dialog to select type
+                file_type, ok = QtWidgets.QInputDialog.getItem(
+                    self._mw,
+                    "Select File Type",
+                    "What type of data is this file?",
+                    ["Pulsed Measurement", "Raw Timetrace", "Laser Pulses"],
+                    0,
+                    False
+                )
+                
+                if ok:
+                    if file_type == "Pulsed Measurement":
+                        self.sigOpenPulsedFile.emit(file_path)
+                    elif file_type == "Raw Timetrace":
+                        self.sigOpenRawFile.emit(file_path)
+                    elif file_type == "Laser Pulses":
+                        self.sigOpenLaserFile.emit(file_path)
+            
+            # Update recent files menu
+            self._update_recent_files_menu()
+    
+    def open_pulsed_file_dialog(self):
+        """Open a file dialog specifically for pulsed measurement data"""
+        # Get the initial directory
+        initial_dir = self._default_save_path
+        if not initial_dir or not os.path.isdir(initial_dir):
+            initial_dir = os.path.expanduser("~")
+        
+        # Open file dialog
+        file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self._mw,
+            "Open Pulsed Measurement File",
+            initial_dir,
+            "Data Files (*.dat *.csv *.npy);;All Files (*)"
+        )
+        
+        if file_path:
+            # Update default save path
+            self._default_save_path = os.path.dirname(file_path)
+            
+            # Emit signal to load pulsed file
+            self.sigOpenPulsedFile.emit(file_path)
+            
+            # Update status
+            self._mw.statusbar.showMessage(f"Loaded pulsed measurement file: {os.path.basename(file_path)}")
+            
+            # Update recent files menu
+            self._update_recent_files_menu()
+    
+    def open_raw_file_dialog(self):
+        """Open a file dialog specifically for raw timetrace data"""
+        # Get the initial directory
+        initial_dir = self._default_save_path
+        if not initial_dir or not os.path.isdir(initial_dir):
+            initial_dir = os.path.expanduser("~")
+        
+        # Open file dialog
+        file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self._mw,
+            "Open Raw Timetrace File",
+            initial_dir,
+            "Data Files (*.dat *.csv *.npy);;All Files (*)"
+        )
+        
+        if file_path:
+            # Update default save path
+            self._default_save_path = os.path.dirname(file_path)
+            
+            # Emit signal to load raw file
+            self.sigOpenRawFile.emit(file_path)
+            
+            # Update status
+            self._mw.statusbar.showMessage(f"Loaded raw timetrace file: {os.path.basename(file_path)}")
+            
+            # Update recent files menu
+            self._update_recent_files_menu()
+    
+    def open_laser_file_dialog(self):
+        """Open a file dialog specifically for laser pulses data"""
+        # Get the initial directory
+        initial_dir = self._default_save_path
+        if not initial_dir or not os.path.isdir(initial_dir):
+            initial_dir = os.path.expanduser("~")
+        
+        # Open file dialog
+        file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self._mw,
+            "Open Laser Pulses File",
+            initial_dir,
+            "Data Files (*.dat *.csv *.npy);;All Files (*)"
+        )
+        
+        if file_path:
+            # Update default save path
+            self._default_save_path = os.path.dirname(file_path)
+            
+            # Emit signal to load laser file
+            self.sigOpenLaserFile.emit(file_path)
+            
+            # Update status
+            self._mw.statusbar.showMessage(f"Loaded laser pulses file: {os.path.basename(file_path)}")
             
             # Update recent files menu
             self._update_recent_files_menu()
@@ -292,7 +459,32 @@ class PulsedDataAnalysisGui(GuiBase):
     def open_recent_file(self, file_path):
         """Open a file from the recent files list"""
         if os.path.isfile(file_path):
-            self.sigOpenFile.emit(file_path)
+            # Determine file type and emit the appropriate signal
+            basename = os.path.basename(file_path).lower()
+            if "_pulsed_measurement" in basename:
+                self.sigOpenPulsedFile.emit(file_path)
+            elif "_raw_timetrace" in basename:
+                self.sigOpenRawFile.emit(file_path)
+            elif "_laser_pulses" in basename:
+                self.sigOpenLaserFile.emit(file_path)
+            else:
+                # If file type can't be determined from name, show dialog to select type
+                file_type, ok = QtWidgets.QInputDialog.getItem(
+                    self._mw,
+                    "Select File Type",
+                    "What type of data is this file?",
+                    ["Pulsed Measurement", "Raw Timetrace", "Laser Pulses"],
+                    0,
+                    False
+                )
+                
+                if ok:
+                    if file_type == "Pulsed Measurement":
+                        self.sigOpenPulsedFile.emit(file_path)
+                    elif file_type == "Raw Timetrace":
+                        self.sigOpenRawFile.emit(file_path)
+                    elif file_type == "Laser Pulses":
+                        self.sigOpenLaserFile.emit(file_path)
         else:
             # File doesn't exist anymore
             QtWidgets.QMessageBox.warning(
