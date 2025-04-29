@@ -77,6 +77,10 @@ class PulsedDataAnalysisLogic(LogicBase):
     __fast_counter_binwidth = StatusVar(default=1.0e-9)
     __fast_counter_gates = StatusVar(default=0)
     
+    # PulseExtractor and PulseAnalyzer settings
+    extraction_parameters = StatusVar(default=None)
+    analysis_parameters = StatusVar(default=None)
+    
     # NV state analysis settings
     _nv_threshold = StatusVar(default=0.7)  # Threshold for NV state identification
     _nv_reference_level = StatusVar(default=None)  # Reference level for ms=0
@@ -126,6 +130,14 @@ class PulsedDataAnalysisLogic(LogicBase):
     def on_deactivate(self):
         """Cleanup when module is deactivated"""
         pass
+        
+    @extraction_parameters.representer
+    def __repr_extraction_parameters(self, value):
+        return self._pulseextractor.full_settings_dict if hasattr(self, '_pulseextractor') else None
+    
+    @analysis_parameters.representer
+    def __repr_analysis_parameters(self, value):
+        return self._pulseanalyzer.full_settings_dict if hasattr(self, '_pulseanalyzer') else None
     
     def _initialize_data_containers(self):
         """Initialize all data containers with empty values"""
