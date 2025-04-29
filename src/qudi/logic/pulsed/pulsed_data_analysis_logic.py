@@ -161,6 +161,7 @@ class PulsedDataAnalysisLogic(LogicBase):
             self.log.error(f"File does not exist: {file_path}")
             return
         
+        self.log.info(f"Attempting to load data from: {file_path}")
         self._initialize_data_containers()
         self.current_file_path = file_path
         
@@ -181,69 +182,106 @@ class PulsedDataAnalysisLogic(LogicBase):
             return
         
         try:
-            # First try to load pulsed measurement data
-            if "_pulsed_measurement" in file_path:
+            # First try to load the selected file, regardless of name pattern
+            try:
                 data, metadata = storage.load_data(file_path)
-                self.signal_data = data.T  # Transpose to match expected format
-                self.metadata = metadata
+                self.log.info(f"Successfully loaded data from {file_path}")
                 
-                # Try to find and load the corresponding raw data file
-                raw_file_path = file_path.replace("_pulsed_measurement", "_raw_timetrace")
-                if os.path.isfile(raw_file_path):
-                    raw_data, raw_metadata = storage.load_data(raw_file_path)
-                    self.raw_data = raw_data.squeeze()
-                    self.metadata.update(raw_metadata)
-                
-                # Try to find and load the corresponding laser pulses file
-                laser_file_path = file_path.replace("_pulsed_measurement", "_laser_pulses")
-                if os.path.isfile(laser_file_path):
-                    laser_data, laser_metadata = storage.load_data(laser_file_path)
-                    self.laser_data = laser_data
-                    self.metadata.update(laser_metadata)
+                # Determine data type based on shape and content
+                if data.ndim == 2 and data.shape[1] >= 2:
+                    # Likely pulsed measurement data (x and y columns)
+                    self.log.info(f"File appears to be pulsed measurement data with shape {data.shape}")
+                    self.signal_data = data.T  # Transpose to match expected format
+                    self.metadata = metadata
+                elif data.ndim == 2 and data.shape[0] > 1:
+                    # Likely laser pulse data (multiple rows/pulses)
+                    self.log.info(f"File appears to be laser pulse data with shape {data.shape}")
+                    self.laser_data = data
+                    self.metadata = metadata
+                else:
+                    # Likely raw data or generic data
+                    self.log.info(f"File appears to be raw data with shape {data.shape}")
+                    self.raw_data = data.squeeze()
+                    self.metadata = metadata
+            except Exception as e:
+                self.log.error(f"Error loading the main file {file_path}: {str(e)}")
+                # Continue to try loading related files
             
-            # If not a pulsed measurement file, try to load raw data
-            elif "_raw_timetrace" in file_path:
-                raw_data, raw_metadata = storage.load_data(file_path)
-                self.raw_data = raw_data.squeeze()
-                self.metadata = raw_metadata
-                
-                # Try to find and load the corresponding files
-                pulsed_file_path = file_path.replace("_raw_timetrace", "_pulsed_measurement")
-                if os.path.isfile(pulsed_file_path):
-                    data, metadata = storage.load_data(pulsed_file_path)
-                    self.signal_data = data.T
-                    self.metadata.update(metadata)
-                
-                laser_file_path = file_path.replace("_raw_timetrace", "_laser_pulses")
-                if os.path.isfile(laser_file_path):
-                    laser_data, laser_metadata = storage.load_data(laser_file_path)
-                    self.laser_data = laser_data
-                    self.metadata.update(laser_metadata)
+            # Now try to identify file type based on name and load related files
+            basename = os.path.basename(file_path)
+            dirname = os.path.dirname(file_path)
             
-            # If laser pulses file, load it
-            elif "_laser_pulses" in file_path:
-                laser_data, laser_metadata = storage.load_data(file_path)
-                self.laser_data = laser_data
-                self.metadata = laser_metadata
-                
-                # Try to find and load the corresponding files
-                raw_file_path = file_path.replace("_laser_pulses", "_raw_timetrace")
-                if os.path.isfile(raw_file_path):
-                    raw_data, raw_metadata = storage.load_data(raw_file_path)
-                    self.raw_data = raw_data.squeeze()
-                    self.metadata.update(raw_metadata)
-                
-                pulsed_file_path = file_path.replace("_laser_pulses", "_pulsed_measurement")
-                if os.path.isfile(pulsed_file_path):
-                    data, metadata = storage.load_data(pulsed_file_path)
-                    self.signal_data = data.T
-                    self.metadata.update(metadata)
+            # Try to get base name without any of the special suffixes
+            base_name = basename
+            for suffix in ["_pulsed_measurement", "_raw_timetrace", "_laser_pulses"]:
+                if suffix in base_name:
+                    base_name = base_name.replace(suffix, "")
             
-            else:
-                # Generic file, try to load as raw data
-                data, metadata = storage.load_data(file_path)
-                self.raw_data = data.squeeze()
-                self.metadata = metadata
+            # File extensions to try
+            extensions = [file_extension]  # Start with the same extension as the loaded file
+            if file_extension != '.dat':
+                extensions.append('.dat')  # .dat is the most common
+            if file_extension != '.csv':
+                extensions.append('.csv')
+            if file_extension != '.npy':
+                extensions.append('.npy')
+            
+            # Try to find related files with all possible extensions
+            self.log.info(f"Looking for related files with base name: {base_name}")
+            
+            # If we don't have pulsed measurement data yet, try to find it
+            if self.signal_data is None:
+                for ext in extensions:
+                    pulsed_file_path = os.path.join(dirname, base_name + "_pulsed_measurement" + ext)
+                    self.log.info(f"Checking for pulsed measurement file: {pulsed_file_path}")
+                    if os.path.isfile(pulsed_file_path) and pulsed_file_path != file_path:
+                        try:
+                            data, metadata = storage.load_data(pulsed_file_path)
+                            self.signal_data = data.T
+                            if not self.metadata:
+                                self.metadata = metadata
+                            else:
+                                self.metadata.update(metadata)
+                            self.log.info(f"Loaded pulsed measurement data from {pulsed_file_path}")
+                            break
+                        except Exception as e:
+                            self.log.error(f"Error loading pulsed file {pulsed_file_path}: {str(e)}")
+            
+            # If we don't have raw data yet, try to find it
+            if self.raw_data is None:
+                for ext in extensions:
+                    raw_file_path = os.path.join(dirname, base_name + "_raw_timetrace" + ext)
+                    self.log.info(f"Checking for raw data file: {raw_file_path}")
+                    if os.path.isfile(raw_file_path) and raw_file_path != file_path:
+                        try:
+                            raw_data, raw_metadata = storage.load_data(raw_file_path)
+                            self.raw_data = raw_data.squeeze()
+                            if not self.metadata:
+                                self.metadata = raw_metadata
+                            else:
+                                self.metadata.update(raw_metadata)
+                            self.log.info(f"Loaded raw data from {raw_file_path}")
+                            break
+                        except Exception as e:
+                            self.log.error(f"Error loading raw file {raw_file_path}: {str(e)}")
+            
+            # If we don't have laser data yet, try to find it
+            if self.laser_data is None:
+                for ext in extensions:
+                    laser_file_path = os.path.join(dirname, base_name + "_laser_pulses" + ext)
+                    self.log.info(f"Checking for laser pulses file: {laser_file_path}")
+                    if os.path.isfile(laser_file_path) and laser_file_path != file_path:
+                        try:
+                            laser_data, laser_metadata = storage.load_data(laser_file_path)
+                            self.laser_data = laser_data
+                            if not self.metadata:
+                                self.metadata = laser_metadata
+                            else:
+                                self.metadata.update(laser_metadata)
+                            self.log.info(f"Loaded laser data from {laser_file_path}")
+                            break
+                        except Exception as e:
+                            self.log.error(f"Error loading laser file {laser_file_path}: {str(e)}")
             
             # Add to recent files list
             if file_path in self._recent_files:
@@ -260,11 +298,16 @@ class PulsedDataAnalysisLogic(LogicBase):
                 'file_path': file_path,
                 'metadata': self.metadata
             }
+            
+            self.log.info(f"Data loading complete. Raw data: {data_info['has_raw_data']}, "
+                         f"Laser data: {data_info['has_laser_data']}, "
+                         f"Signal data: {data_info['has_signal_data']}")
+            
             self.sigDataLoaded.emit(data_info)
             return self.metadata
             
         except Exception as e:
-            self.log.error(f"Error loading data from {file_path}: {str(e)}")
+            self.log.error(f"Error during data loading process for {file_path}: {str(e)}")
             return
     
     def extract_laser_pulses(self):
@@ -291,46 +334,101 @@ class PulsedDataAnalysisLogic(LogicBase):
         
         @return tuple: (signal_data, error_data)
         """
+        # Check if we have laser data to analyze
         if self.laser_data is None:
             self.log.error("No laser data available for analysis")
-            return None, None
+            
+            # If signal data is already loaded (e.g., from a _pulsed_measurement file),
+            # we can still perform NV state analysis on that
+            if self.signal_data is not None:
+                self.log.info("Using already loaded signal data for NV state analysis")
+                self.analyze_nv_states()
+                
+                # Emit results with what we have
+                self.sigAnalysisComplete.emit({
+                    'signal_data': self.signal_data,
+                    'analysis_results': {},
+                    'nv_state_data': self.nv_state_data,
+                    'state_statistics': self.state_statistics
+                })
+                return None, None
+            else:
+                return None, None
         
         try:
+            self.log.info(f"Analyzing laser data with shape {self.laser_data.shape}")
             signal, error = self._pulseanalyzer.analyse_laser_pulses(self.laser_data)
+            self.log.info(f"Laser pulse analysis complete, got signal with length {len(signal)}")
             
             # Create signal data array if not already loaded
             if self.signal_data is None:
+                self.log.info("Creating new signal data array from analyzed laser pulses")
                 # Check if controlled_variable is in metadata
                 if 'Controlled variable' in self.metadata:
                     x_data = np.array(self.metadata['Controlled variable'])
+                    self.log.info(f"Using 'Controlled variable' from metadata with length {len(x_data)}")
                 elif 'controlled_variable' in self.metadata:
                     x_data = np.array(self.metadata['controlled_variable'])
+                    self.log.info(f"Using 'controlled_variable' from metadata with length {len(x_data)}")
                 else:
                     # Create default x data
                     x_data = np.arange(len(signal))
+                    self.log.info(f"No controlled variable in metadata, creating default x data with length {len(x_data)}")
                 
                 # Determine signal dimension based on alternating flag
                 alternating = self.metadata.get('alternating', False)
                 signal_dim = 3 if alternating else 2
                 
+                # Check if dimensions match
+                if alternating and len(x_data) * 2 != len(signal):
+                    self.log.warning(f"Mismatch in data dimensions: x_data length ({len(x_data)}) * 2 != signal length ({len(signal)})")
+                    self.log.info("Adjusting x_data to match signal data")
+                    x_data = np.arange(len(signal) // 2) if alternating else np.arange(len(signal))
+                elif not alternating and len(x_data) != len(signal):
+                    self.log.warning(f"Mismatch in data dimensions: x_data length ({len(x_data)}) != signal length ({len(signal)})")
+                    self.log.info("Adjusting x_data to match signal data")
+                    x_data = np.arange(len(signal))
+                
+                # Create signal data array
                 self.signal_data = np.zeros((signal_dim, len(x_data)), dtype=float)
                 self.signal_data[0] = x_data
                 
                 # Populate signal data
                 if alternating:
+                    self.log.info(f"Processing alternating data, signal length: {len(signal)}")
                     # Exclude laser pulses to ignore if present
                     laser_ignore_list = self.metadata.get('Laser ignore indices', [])
                     laser_ignore_list = self.metadata.get('laser_ignore_list', laser_ignore_list)
                     
                     if len(laser_ignore_list) > 0:
+                        self.log.info(f"Excluding {len(laser_ignore_list)} laser pulses from analysis")
                         signal = np.delete(signal, laser_ignore_list)
                         error = np.delete(error, laser_ignore_list)
+                    
+                    # Make sure the signal length is even for alternating data
+                    if len(signal) % 2 != 0:
+                        self.log.warning(f"Odd number of signal points ({len(signal)}) for alternating data, trimming last point")
+                        signal = signal[:-1]
+                        error = error[:-1]
                     
                     # Split alternating data
                     self.signal_data[1] = signal[::2]
                     self.signal_data[2] = signal[1::2]
+                    self.log.info(f"Alternating data processed, signal_data shape: {self.signal_data.shape}")
                 else:
-                    self.signal_data[1] = signal
+                    self.log.info(f"Processing non-alternating data, signal length: {len(signal)}")
+                    # Make sure lengths match
+                    if len(signal) != len(x_data):
+                        self.log.warning(f"Signal length ({len(signal)}) doesn't match x_data length ({len(x_data)}), trimming to shorter")
+                        min_len = min(len(signal), len(x_data))
+                        self.signal_data[0] = x_data[:min_len]
+                        self.signal_data[1] = signal[:min_len]
+                    else:
+                        self.signal_data[1] = signal
+                    
+                    self.log.info(f"Non-alternating data processed, signal_data shape: {self.signal_data.shape}")
+            else:
+                self.log.info(f"Using existing signal_data with shape {self.signal_data.shape}")
             
             self.analysis_results = {
                 'signal': signal,
@@ -352,6 +450,8 @@ class PulsedDataAnalysisLogic(LogicBase):
             
         except Exception as e:
             self.log.error(f"Error analyzing laser pulses: {str(e)}")
+            import traceback
+            self.log.error(f"Traceback: {traceback.format_exc()}")
             return None, None
     
     def analyze_nv_states(self):
@@ -365,21 +465,32 @@ class PulsedDataAnalysisLogic(LogicBase):
             return None
         
         try:
+            self.log.info(f"Analyzing NV states from signal data with shape {self.signal_data.shape}")
+            
             # Get reference level
             reference = self._nv_reference_level
             if reference is None:
                 # If no reference set, use the mean as reference
                 reference = np.mean(self.signal_data[1])
                 self._nv_reference_level = reference
+                self.log.info(f"No reference level set, using mean value: {reference}")
+            else:
+                self.log.info(f"Using existing reference level: {reference}")
             
             # Determine threshold value
             threshold = reference * self._nv_threshold
+            self.log.info(f"Using threshold value: {threshold} (reference: {reference} * threshold factor: {self._nv_threshold})")
             
             # Assign states based on threshold
             # If counts > threshold: ms=0 state (state=0)
             # If counts <= threshold: ms=-1 or ms=+1 state (state=1)
             states = np.zeros_like(self.signal_data[1])
             states[self.signal_data[1] <= threshold] = 1
+            
+            # Log how many points are assigned to each state
+            ms0_count = np.sum(states == 0)
+            ms1_count = np.sum(states == 1)
+            self.log.info(f"Assigned states: ms=0: {ms0_count}, ms=-1/+1: {ms1_count}")
             
             self.nv_state_data = states
             
@@ -388,8 +499,6 @@ class PulsedDataAnalysisLogic(LogicBase):
             self.state_histogram = (unique, counts)
             
             total_counts = len(states)
-            ms0_count = np.sum(states == 0)
-            ms1_count = np.sum(states == 1)
             
             self.state_statistics = {
                 'total_counts': total_counts,
@@ -401,6 +510,8 @@ class PulsedDataAnalysisLogic(LogicBase):
                 'reference_level': reference
             }
             
+            self.log.info(f"NV state statistics: {self.state_statistics}")
+            
             # Emit histogram and statistics
             self.sigNvStateHistogramUpdated.emit(self.state_histogram, self.state_statistics)
             
@@ -408,6 +519,8 @@ class PulsedDataAnalysisLogic(LogicBase):
             
         except Exception as e:
             self.log.error(f"Error analyzing NV states: {str(e)}")
+            import traceback
+            self.log.error(f"Traceback: {traceback.format_exc()}")
             return None
     
     def set_nv_threshold(self, threshold):
