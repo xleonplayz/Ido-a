@@ -63,6 +63,10 @@ class PulsedDataAnalysisLogic(LogicBase):
     # No connectors needed as we instantiate helpers directly
     
     # Config options
+    # Optional additional paths to import from
+    extraction_import_path = ConfigOption(name='additional_extraction_path', default=None)
+    analysis_import_path = ConfigOption(name='additional_analysis_path', default=None)
+    
     _default_data_storage_cls = ConfigOption(name='default_data_storage_type',
                                            default='text',
                                            constructor=_data_storage_from_cfg_option)
