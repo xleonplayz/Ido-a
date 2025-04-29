@@ -162,30 +162,39 @@ class PulsedDataAnalysisLogic(LogicBase):
             return
         
         self.log.info(f"Attempting to load data from: {file_path}")
+        self.log.debug(f"Current working directory: {os.getcwd()}")
         self._initialize_data_containers()
         self.current_file_path = file_path
         
         # Determine file type based on extension
         file_extension = os.path.splitext(file_path)[1].lower()
+        self.log.debug(f"File extension: {file_extension}")
         
         if file_extension == '.dat':
             storage = TextDataStorage()
             self.current_file_type = 'text'
+            self.log.debug("Using TextDataStorage for file loading")
         elif file_extension == '.csv':
             storage = CsvDataStorage()
             self.current_file_type = 'csv'
+            self.log.debug("Using CsvDataStorage for file loading")
         elif file_extension == '.npy':
             storage = NpyDataStorage()
             self.current_file_type = 'npy'
+            self.log.debug("Using NpyDataStorage for file loading")
         else:
             self.log.error(f"Unsupported file type: {file_extension}")
             return
         
         try:
             # First try to load the selected file, regardless of name pattern
+            initial_load_successful = False
             try:
                 data, metadata = storage.load_data(file_path)
+                initial_load_successful = True
                 self.log.info(f"Successfully loaded data from {file_path}")
+                self.log.debug(f"Data shape: {data.shape}, Data type: {data.dtype}")
+                self.log.debug(f"Metadata keys: {list(metadata.keys())}")
                 
                 # Determine data type based on shape and content
                 if data.ndim == 2 and data.shape[1] >= 2:
@@ -193,29 +202,64 @@ class PulsedDataAnalysisLogic(LogicBase):
                     self.log.info(f"File appears to be pulsed measurement data with shape {data.shape}")
                     self.signal_data = data.T  # Transpose to match expected format
                     self.metadata = metadata
+                    self.log.debug(f"Signal data shape after transpose: {self.signal_data.shape}")
                 elif data.ndim == 2 and data.shape[0] > 1:
                     # Likely laser pulse data (multiple rows/pulses)
                     self.log.info(f"File appears to be laser pulse data with shape {data.shape}")
                     self.laser_data = data
                     self.metadata = metadata
+                    self.log.debug(f"Laser data rows: {self.laser_data.shape[0]}, columns: {self.laser_data.shape[1]}")
                 else:
                     # Likely raw data or generic data
                     self.log.info(f"File appears to be raw data with shape {data.shape}")
                     self.raw_data = data.squeeze()
                     self.metadata = metadata
+                    self.log.debug(f"Raw data shape after squeeze: {self.raw_data.shape}")
             except Exception as e:
                 self.log.error(f"Error loading the main file {file_path}: {str(e)}")
+                import traceback
+                self.log.debug(f"Traceback for main file loading error: {traceback.format_exc()}")
                 # Continue to try loading related files
             
             # Now try to identify file type based on name and load related files
             basename = os.path.basename(file_path)
             dirname = os.path.dirname(file_path)
             
+            # Check filenames for potential typos or encoding issues
+            self.log.debug(f"Raw basename: {basename}")
+            self.log.debug(f"Directory path: {dirname}")
+            
             # Try to get base name without any of the special suffixes
             base_name = basename
-            for suffix in ["_pulsed_measurement", "_raw_timetrace", "_laser_pulses"]:
+            special_suffixes = ["_pulsed_measurement", "_raw_timetrace", "_laser_pulses"]
+            found_suffixes = []
+            for suffix in special_suffixes:
                 if suffix in base_name:
+                    found_suffixes.append(suffix)
                     base_name = base_name.replace(suffix, "")
+            
+            if found_suffixes:
+                self.log.debug(f"Found suffixes in filename: {found_suffixes}")
+            else:
+                self.log.debug(f"No standard suffixes found in filename. Will try to detect related files anyway.")
+            
+            # Special handling for filenames with unusual characters or encoding issues
+            self.log.debug(f"Cleaned base name: {base_name}")
+            for i, char in enumerate(base_name):
+                if ord(char) > 127:
+                    self.log.warning(f"Non-ASCII character at position {i} in filename: {char} (code {ord(char)})")
+            
+            # Check if the base name contains other possible variations of the suffixes
+            possible_suffix_variations = {
+                "_pulsed_measurement": ["_pulsed_measurement", "_pulsedmeasurement", "_pulsed", "_measurement"],
+                "_raw_timetrace": ["_raw_timetrace", "_rawtimetrace", "_raw", "_timetrace"],
+                "_laser_pulses": ["_laser_pulses", "_laserpulses", "_laser"]
+            }
+            
+            for standard, variations in possible_suffix_variations.items():
+                for var in variations:
+                    if var != standard and var in basename:
+                        self.log.warning(f"Found possible suffix variation: '{var}' instead of '{standard}'")
             
             # File extensions to try
             extensions = [file_extension]  # Start with the same extension as the loaded file
@@ -226,62 +270,133 @@ class PulsedDataAnalysisLogic(LogicBase):
             if file_extension != '.npy':
                 extensions.append('.npy')
             
+            self.log.debug(f"Will try the following extensions: {extensions}")
+            
             # Try to find related files with all possible extensions
             self.log.info(f"Looking for related files with base name: {base_name}")
             
             # If we don't have pulsed measurement data yet, try to find it
             if self.signal_data is None:
+                self.log.debug("No signal data loaded yet, looking for pulsed measurement files")
                 for ext in extensions:
                     pulsed_file_path = os.path.join(dirname, base_name + "_pulsed_measurement" + ext)
-                    self.log.info(f"Checking for pulsed measurement file: {pulsed_file_path}")
+                    self.log.debug(f"Checking if file exists: {pulsed_file_path}")
                     if os.path.isfile(pulsed_file_path) and pulsed_file_path != file_path:
                         try:
-                            data, metadata = storage.load_data(pulsed_file_path)
+                            self.log.info(f"Found pulsed measurement file, attempting to load: {pulsed_file_path}")
+                            
+                            # Try a different storage type if needed based on extension
+                            if ext == '.dat' and self.current_file_type != 'text':
+                                temp_storage = TextDataStorage()
+                                self.log.debug("Switching to TextDataStorage for this file")
+                            elif ext == '.csv' and self.current_file_type != 'csv':
+                                temp_storage = CsvDataStorage()
+                                self.log.debug("Switching to CsvDataStorage for this file")
+                            elif ext == '.npy' and self.current_file_type != 'npy':
+                                temp_storage = NpyDataStorage()
+                                self.log.debug("Switching to NpyDataStorage for this file")
+                            else:
+                                temp_storage = storage
+                                
+                            data, metadata = temp_storage.load_data(pulsed_file_path)
+                            self.log.debug(f"Loaded pulsed data with shape: {data.shape}")
+                            
                             self.signal_data = data.T
                             if not self.metadata:
                                 self.metadata = metadata
                             else:
                                 self.metadata.update(metadata)
-                            self.log.info(f"Loaded pulsed measurement data from {pulsed_file_path}")
+                            self.log.info(f"Successfully loaded pulsed measurement data from {pulsed_file_path}")
                             break
                         except Exception as e:
                             self.log.error(f"Error loading pulsed file {pulsed_file_path}: {str(e)}")
+                            import traceback
+                            self.log.debug(f"Traceback for pulsed file loading error: {traceback.format_exc()}")
+                
+                if self.signal_data is None:
+                    self.log.warning("Failed to find or load any pulsed measurement data")
             
             # If we don't have raw data yet, try to find it
             if self.raw_data is None:
+                self.log.debug("No raw data loaded yet, looking for raw timetrace files")
                 for ext in extensions:
                     raw_file_path = os.path.join(dirname, base_name + "_raw_timetrace" + ext)
-                    self.log.info(f"Checking for raw data file: {raw_file_path}")
+                    self.log.debug(f"Checking if file exists: {raw_file_path}")
                     if os.path.isfile(raw_file_path) and raw_file_path != file_path:
                         try:
-                            raw_data, raw_metadata = storage.load_data(raw_file_path)
+                            self.log.info(f"Found raw timetrace file, attempting to load: {raw_file_path}")
+                            
+                            # Try a different storage type if needed based on extension
+                            if ext == '.dat' and self.current_file_type != 'text':
+                                temp_storage = TextDataStorage()
+                                self.log.debug("Switching to TextDataStorage for this file")
+                            elif ext == '.csv' and self.current_file_type != 'csv':
+                                temp_storage = CsvDataStorage()
+                                self.log.debug("Switching to CsvDataStorage for this file")
+                            elif ext == '.npy' and self.current_file_type != 'npy':
+                                temp_storage = NpyDataStorage()
+                                self.log.debug("Switching to NpyDataStorage for this file")
+                            else:
+                                temp_storage = storage
+                            
+                            raw_data, raw_metadata = temp_storage.load_data(raw_file_path)
+                            self.log.debug(f"Loaded raw data with shape: {raw_data.shape}")
+                            
                             self.raw_data = raw_data.squeeze()
                             if not self.metadata:
                                 self.metadata = raw_metadata
                             else:
                                 self.metadata.update(raw_metadata)
-                            self.log.info(f"Loaded raw data from {raw_file_path}")
+                            self.log.info(f"Successfully loaded raw data from {raw_file_path}")
                             break
                         except Exception as e:
                             self.log.error(f"Error loading raw file {raw_file_path}: {str(e)}")
+                            import traceback
+                            self.log.debug(f"Traceback for raw file loading error: {traceback.format_exc()}")
+                
+                if self.raw_data is None:
+                    self.log.warning("Failed to find or load any raw timetrace data")
             
             # If we don't have laser data yet, try to find it
             if self.laser_data is None:
+                self.log.debug("No laser data loaded yet, looking for laser pulses files")
                 for ext in extensions:
                     laser_file_path = os.path.join(dirname, base_name + "_laser_pulses" + ext)
-                    self.log.info(f"Checking for laser pulses file: {laser_file_path}")
+                    self.log.debug(f"Checking if file exists: {laser_file_path}")
                     if os.path.isfile(laser_file_path) and laser_file_path != file_path:
                         try:
-                            laser_data, laser_metadata = storage.load_data(laser_file_path)
+                            self.log.info(f"Found laser pulses file, attempting to load: {laser_file_path}")
+                            
+                            # Try a different storage type if needed based on extension
+                            if ext == '.dat' and self.current_file_type != 'text':
+                                temp_storage = TextDataStorage()
+                                self.log.debug("Switching to TextDataStorage for this file")
+                            elif ext == '.csv' and self.current_file_type != 'csv':
+                                temp_storage = CsvDataStorage()
+                                self.log.debug("Switching to CsvDataStorage for this file")
+                            elif ext == '.npy' and self.current_file_type != 'npy':
+                                temp_storage = NpyDataStorage()
+                                self.log.debug("Switching to NpyDataStorage for this file")
+                            else:
+                                temp_storage = storage
+                            
+                            laser_data, laser_metadata = temp_storage.load_data(laser_file_path)
+                            self.log.debug(f"Loaded laser data with shape: {laser_data.shape}")
+                            
                             self.laser_data = laser_data
                             if not self.metadata:
                                 self.metadata = laser_metadata
                             else:
                                 self.metadata.update(laser_metadata)
-                            self.log.info(f"Loaded laser data from {laser_file_path}")
+                            self.log.info(f"Successfully loaded laser data from {laser_file_path}")
                             break
                         except Exception as e:
                             self.log.error(f"Error loading laser file {laser_file_path}: {str(e)}")
+                            import traceback
+                            self.log.debug(f"Traceback for laser file loading error: {traceback.format_exc()}")
+                
+                if self.laser_data is None:
+                    self.log.warning("Failed to find or load any laser pulses data")
             
             # Add to recent files list
             if file_path in self._recent_files:
@@ -303,11 +418,37 @@ class PulsedDataAnalysisLogic(LogicBase):
                          f"Laser data: {data_info['has_laser_data']}, "
                          f"Signal data: {data_info['has_signal_data']}")
             
+            # Log detailed status information for diagnosing issues
+            if not initial_load_successful and not any([data_info['has_raw_data'], 
+                                                       data_info['has_laser_data'], 
+                                                       data_info['has_signal_data']]):
+                self.log.error(f"Failed to load any data from {file_path} or related files!")
+                # Add specific suggestions based on common patterns in error messages
+                if "_pulsed_measurement" in file_path and not os.path.isfile(file_path.replace("_pulsed_measurement", "_laser_pulses")):
+                    self.log.error("Related laser_pulses file does not exist.")
+                if "_raw_timetrace" in file_path and not os.path.isfile(file_path.replace("_raw_timetrace", "_laser_pulses")):
+                    self.log.error("Related laser_pulses file does not exist.")
+            elif data_info['has_signal_data'] and not data_info['has_laser_data']:
+                self.log.warning("Signal data loaded, but no laser data available. NV state analysis might still work.")
+            elif data_info['has_laser_data'] and not data_info['has_raw_data']:
+                self.log.warning("Laser data loaded, but no raw data available. This is normal if only analyzing pre-extracted laser pulses.")
+            
             self.sigDataLoaded.emit(data_info)
             return self.metadata
             
         except Exception as e:
             self.log.error(f"Error during data loading process for {file_path}: {str(e)}")
+            import traceback
+            self.log.error(f"Detailed error traceback: {traceback.format_exc()}")
+            
+            # Try to provide more helpful error messages
+            if "encoding" in str(e).lower() or "decode" in str(e).lower():
+                self.log.error("This appears to be a file encoding issue. Check for unusual characters in the filename.")
+            if "permission" in str(e).lower():
+                self.log.error("This appears to be a file permission issue. Check if the file is accessible.")
+            if "disk" in str(e).lower() or "space" in str(e).lower():
+                self.log.error("This might be a disk space or I/O issue.")
+                
             return
     
     def extract_laser_pulses(self):
@@ -318,14 +459,85 @@ class PulsedDataAnalysisLogic(LogicBase):
         """
         if self.raw_data is None:
             self.log.error("No raw data available for pulse extraction")
-            return
+            self.log.debug("Raw data is None. This can happen if the raw_timetrace file wasn't found or couldn't be loaded.")
+            self.log.debug("Make sure the raw_timetrace file exists and has the correct format. Check for typos in the filename.")
+            return None
         
         try:
+            self.log.info(f"Starting laser pulse extraction from raw data with shape {self.raw_data.shape}")
+            self.log.debug(f"Raw data statistics: min={np.min(self.raw_data)}, max={np.max(self.raw_data)}, mean={np.mean(self.raw_data)}")
+            self.log.debug(f"Extraction settings: {self._pulseextractor.extraction_settings}")
+            
+            # Time the extraction process
+            start_time = datetime.datetime.now()
+            self.log.debug(f"Starting pulse extraction at {start_time}")
+            
             return_dict = self._pulseextractor.extract_laser_pulses(self.raw_data)
+            
+            end_time = datetime.datetime.now()
+            extraction_duration = (end_time - start_time).total_seconds()
+            self.log.debug(f"Pulse extraction took {extraction_duration:.2f} seconds")
+            
+            if 'laser_counts_arr' not in return_dict or return_dict['laser_counts_arr'] is None:
+                self.log.error("Pulse extractor did not return valid laser_counts_arr")
+                self.log.debug(f"Return dictionary keys: {list(return_dict.keys())}")
+                return None
+            
             self.laser_data = return_dict['laser_counts_arr']
+            
+            # Log information about the extracted pulses
+            num_pulses = self.laser_data.shape[0] if self.laser_data is not None else 0
+            self.log.info(f"Successfully extracted {num_pulses} laser pulses")
+            
+            if num_pulses > 0:
+                pulse_length = self.laser_data.shape[1]
+                self.log.debug(f"Pulse length: {pulse_length} bins")
+                self.log.debug(f"Laser data min counts: {np.min(self.laser_data)}, max: {np.max(self.laser_data)}")
+                
+                # Calculate average pulse shape for visualization/debugging
+                avg_pulse = np.mean(self.laser_data, axis=0)
+                binwidth = self.fast_counter_settings['bin_width']
+                self.log.debug(f"Average pulse shape (first 5 bins): {avg_pulse[:5]}")
+                
+                # Check for potential issues with the extracted pulses
+                zero_pulses = np.sum(np.all(self.laser_data == 0, axis=1))
+                if zero_pulses > 0:
+                    self.log.warning(f"Detected {zero_pulses} pulses with all zero counts")
+                
+                very_low_pulses = np.sum(np.max(self.laser_data, axis=1) < 5)
+                if very_low_pulses > 0:
+                    self.log.warning(f"Detected {very_low_pulses} pulses with very low counts (max < 5)")
+                
+                # Log some additional info about the return dictionary
+                for key in return_dict:
+                    if key != 'laser_counts_arr':
+                        value = return_dict[key]
+                        if isinstance(value, np.ndarray):
+                            self.log.debug(f"Returned '{key}' with shape {value.shape}")
+                        else:
+                            self.log.debug(f"Returned '{key}': {value}")
+            else:
+                self.log.error("No laser pulses were extracted from the raw data")
+                self.log.debug("This could indicate an issue with the extraction settings or raw data format")
+            
             return return_dict
+            
         except Exception as e:
             self.log.error(f"Error extracting laser pulses: {str(e)}")
+            import traceback
+            self.log.error(f"Traceback: {traceback.format_exc()}")
+            
+            # Try to provide more specific error messages
+            error_msg = str(e).lower()
+            if "shape" in error_msg or "dimension" in error_msg:
+                self.log.error("This appears to be a data shape/dimension mismatch. Check if the raw data format is correct.")
+            elif "memory" in error_msg:
+                self.log.error("This appears to be a memory error. The raw data might be too large to process.")
+            elif "attribute" in error_msg:
+                self.log.error("This appears to be a missing attribute error. Check the pulse extractor settings.")
+            elif "zero" in error_msg or "divide" in error_msg:
+                self.log.error("This appears to be a division by zero error, possibly due to invalid extraction parameters.")
+                
             return None
     
     def analyze_laser_pulses(self):
@@ -337,12 +549,21 @@ class PulsedDataAnalysisLogic(LogicBase):
         # Check if we have laser data to analyze
         if self.laser_data is None:
             self.log.error("No laser data available for analysis")
+            self.log.debug("Laser data is None. This can happen if the laser_pulses file wasn't found or couldn't be loaded.")
             
             # If signal data is already loaded (e.g., from a _pulsed_measurement file),
             # we can still perform NV state analysis on that
             if self.signal_data is not None:
                 self.log.info("Using already loaded signal data for NV state analysis")
-                self.analyze_nv_states()
+                self.log.debug(f"Signal data shape: {self.signal_data.shape}")
+                
+                try:
+                    self.analyze_nv_states()
+                    self.log.info("NV state analysis completed on existing signal data")
+                except Exception as e:
+                    self.log.error(f"Failed to analyze NV states on existing signal data: {str(e)}")
+                    import traceback
+                    self.log.error(f"Traceback: {traceback.format_exc()}")
                 
                 # Emit results with what we have
                 self.sigAnalysisComplete.emit({
@@ -353,82 +574,170 @@ class PulsedDataAnalysisLogic(LogicBase):
                 })
                 return None, None
             else:
+                self.log.error("No signal data available either. Cannot perform NV state analysis.")
+                self.log.debug("Both laser_data and signal_data are None. Try loading a different file or check file integrity.")
                 return None, None
         
         try:
             self.log.info(f"Analyzing laser data with shape {self.laser_data.shape}")
+            self.log.debug(f"Laser data type: {self.laser_data.dtype}, min: {np.min(self.laser_data)}, max: {np.max(self.laser_data)}")
+            self.log.debug(f"Analysis settings: {self._pulseanalyzer.analysis_settings}")
+            
+            # Call the pulse analyzer
+            start_time = datetime.datetime.now()
+            self.log.debug(f"Starting laser pulse analysis at {start_time}")
             signal, error = self._pulseanalyzer.analyse_laser_pulses(self.laser_data)
+            end_time = datetime.datetime.now()
+            analysis_duration = (end_time - start_time).total_seconds()
+            self.log.debug(f"Pulse analysis took {analysis_duration:.2f} seconds")
+            
+            if signal is None or len(signal) == 0:
+                self.log.error("Pulse analyzer returned empty signal data")
+                self.log.debug("This could indicate an issue with the laser pulse data or analysis settings")
+                return None, None
+                
             self.log.info(f"Laser pulse analysis complete, got signal with length {len(signal)}")
+            self.log.debug(f"Signal min: {np.min(signal)}, max: {np.max(signal)}, mean: {np.mean(signal)}")
             
             # Create signal data array if not already loaded
             if self.signal_data is None:
                 self.log.info("Creating new signal data array from analyzed laser pulses")
-                # Check if controlled_variable is in metadata
-                if 'Controlled variable' in self.metadata:
-                    x_data = np.array(self.metadata['Controlled variable'])
-                    self.log.info(f"Using 'Controlled variable' from metadata with length {len(x_data)}")
-                elif 'controlled_variable' in self.metadata:
-                    x_data = np.array(self.metadata['controlled_variable'])
-                    self.log.info(f"Using 'controlled_variable' from metadata with length {len(x_data)}")
-                else:
+                
+                # Check for controlled variable in metadata (with different possible keys)
+                x_data = None
+                controlled_var_keys = ['Controlled variable', 'controlled_variable', 'x_data', 'x-data', 'x axis']
+                found_key = None
+                
+                for key in controlled_var_keys:
+                    if key in self.metadata:
+                        x_data = np.array(self.metadata[key])
+                        found_key = key
+                        self.log.info(f"Using '{key}' from metadata with length {len(x_data)}")
+                        break
+                
+                if x_data is None:
                     # Create default x data
                     x_data = np.arange(len(signal))
-                    self.log.info(f"No controlled variable in metadata, creating default x data with length {len(x_data)}")
+                    self.log.info(f"No controlled variable found in metadata, creating default x data with length {len(x_data)}")
+                    self.log.debug(f"Metadata keys: {list(self.metadata.keys())}")
+                else:
+                    self.log.debug(f"X data min: {np.min(x_data)}, max: {np.max(x_data)}, type: {x_data.dtype}")
                 
                 # Determine signal dimension based on alternating flag
-                alternating = self.metadata.get('alternating', False)
+                alternating_keys = ['alternating', 'is_alternating', 'alternate']
+                alternating = False
+                for key in alternating_keys:
+                    if key in self.metadata:
+                        alternating = bool(self.metadata[key])
+                        self.log.debug(f"Found alternating flag in metadata key '{key}': {alternating}")
+                        break
+                        
                 signal_dim = 3 if alternating else 2
+                self.log.debug(f"Signal dimension: {signal_dim} (alternating: {alternating})")
                 
-                # Check if dimensions match
-                if alternating and len(x_data) * 2 != len(signal):
-                    self.log.warning(f"Mismatch in data dimensions: x_data length ({len(x_data)}) * 2 != signal length ({len(signal)})")
-                    self.log.info("Adjusting x_data to match signal data")
-                    x_data = np.arange(len(signal) // 2) if alternating else np.arange(len(signal))
-                elif not alternating and len(x_data) != len(signal):
-                    self.log.warning(f"Mismatch in data dimensions: x_data length ({len(x_data)}) != signal length ({len(signal)})")
-                    self.log.info("Adjusting x_data to match signal data")
-                    x_data = np.arange(len(signal))
+                # Check if dimensions match and adjust if needed
+                if alternating:
+                    expected_signal_len = len(x_data) * 2
+                    self.log.debug(f"Alternating data: expected signal length = {expected_signal_len}, actual = {len(signal)}")
+                    
+                    if expected_signal_len != len(signal):
+                        self.log.warning(f"Mismatch in data dimensions: x_data length ({len(x_data)}) * 2 != signal length ({len(signal)})")
+                        
+                        # First check if the actual signal length is even (required for alternating data)
+                        if len(signal) % 2 != 0:
+                            self.log.warning(f"Odd number of data points ({len(signal)}) for alternating data, trimming last point")
+                            signal = signal[:-1]
+                            error = error[:-1]
+                            self.log.debug(f"After trimming: signal length = {len(signal)}")
+                        
+                        # Now adjust x_data to match signal
+                        self.log.info("Adjusting x_data to match signal data")
+                        x_data = np.arange(len(signal) // 2)
+                        self.log.debug(f"Created new x_data with length {len(x_data)}")
+                else:
+                    expected_signal_len = len(x_data)
+                    self.log.debug(f"Non-alternating data: expected signal length = {expected_signal_len}, actual = {len(signal)}")
+                    
+                    if expected_signal_len != len(signal):
+                        self.log.warning(f"Mismatch in data dimensions: x_data length ({len(x_data)}) != signal length ({len(signal)})")
+                        self.log.info("Adjusting x_data to match signal data")
+                        x_data = np.arange(len(signal))
+                        self.log.debug(f"Created new x_data with length {len(x_data)}")
                 
                 # Create signal data array
+                self.log.debug(f"Creating signal_data array with shape ({signal_dim}, {len(x_data)})")
                 self.signal_data = np.zeros((signal_dim, len(x_data)), dtype=float)
                 self.signal_data[0] = x_data
                 
                 # Populate signal data
                 if alternating:
                     self.log.info(f"Processing alternating data, signal length: {len(signal)}")
+                    
                     # Exclude laser pulses to ignore if present
-                    laser_ignore_list = self.metadata.get('Laser ignore indices', [])
-                    laser_ignore_list = self.metadata.get('laser_ignore_list', laser_ignore_list)
+                    laser_ignore_keys = ['Laser ignore indices', 'laser_ignore_list', 'ignore_indices']
+                    laser_ignore_list = []
+                    
+                    for key in laser_ignore_keys:
+                        if key in self.metadata and self.metadata[key]:
+                            laser_ignore_list = self.metadata[key]
+                            self.log.debug(f"Found laser ignore list in metadata key '{key}': {laser_ignore_list}")
+                            break
                     
                     if len(laser_ignore_list) > 0:
                         self.log.info(f"Excluding {len(laser_ignore_list)} laser pulses from analysis")
-                        signal = np.delete(signal, laser_ignore_list)
-                        error = np.delete(error, laser_ignore_list)
+                        self.log.debug(f"Ignore indices: {laser_ignore_list}")
+                        
+                        try:
+                            signal = np.delete(signal, laser_ignore_list)
+                            error = np.delete(error, laser_ignore_list)
+                            self.log.debug(f"After ignoring pulses: signal length = {len(signal)}")
+                        except Exception as e:
+                            self.log.error(f"Error excluding laser pulses: {str(e)}")
+                            self.log.debug(f"Will continue with unfiltered data")
                     
                     # Make sure the signal length is even for alternating data
                     if len(signal) % 2 != 0:
                         self.log.warning(f"Odd number of signal points ({len(signal)}) for alternating data, trimming last point")
                         signal = signal[:-1]
                         error = error[:-1]
+                        self.log.debug(f"After trimming: signal length = {len(signal)}")
                     
                     # Split alternating data
-                    self.signal_data[1] = signal[::2]
-                    self.signal_data[2] = signal[1::2]
-                    self.log.info(f"Alternating data processed, signal_data shape: {self.signal_data.shape}")
+                    try:
+                        self.signal_data[1] = signal[::2]
+                        self.signal_data[2] = signal[1::2]
+                        self.log.info(f"Alternating data processed, signal_data shape: {self.signal_data.shape}")
+                        self.log.debug(f"Signal 1 min: {np.min(self.signal_data[1])}, max: {np.max(self.signal_data[1])}")
+                        self.log.debug(f"Signal 2 min: {np.min(self.signal_data[2])}, max: {np.max(self.signal_data[2])}")
+                    except Exception as e:
+                        self.log.error(f"Error splitting alternating data: {str(e)}")
+                        import traceback
+                        self.log.error(f"Traceback: {traceback.format_exc()}")
+                        # Try to recover by using all data as non-alternating
+                        self.log.warning("Attempting to recover by treating data as non-alternating")
+                        self.signal_data = np.zeros((2, len(signal)), dtype=float)
+                        self.signal_data[0] = np.arange(len(signal))
+                        self.signal_data[1] = signal
                 else:
                     self.log.info(f"Processing non-alternating data, signal length: {len(signal)}")
                     # Make sure lengths match
                     if len(signal) != len(x_data):
                         self.log.warning(f"Signal length ({len(signal)}) doesn't match x_data length ({len(x_data)}), trimming to shorter")
                         min_len = min(len(signal), len(x_data))
+                        self.log.debug(f"Trimming to length {min_len}")
                         self.signal_data[0] = x_data[:min_len]
                         self.signal_data[1] = signal[:min_len]
                     else:
                         self.signal_data[1] = signal
                     
                     self.log.info(f"Non-alternating data processed, signal_data shape: {self.signal_data.shape}")
+                    self.log.debug(f"Signal min: {np.min(self.signal_data[1])}, max: {np.max(self.signal_data[1])}")
             else:
                 self.log.info(f"Using existing signal_data with shape {self.signal_data.shape}")
+                self.log.debug(f"Existing signal_data[0] min: {np.min(self.signal_data[0])}, max: {np.max(self.signal_data[0])}")
+                self.log.debug(f"Existing signal_data[1] min: {np.min(self.signal_data[1])}, max: {np.max(self.signal_data[1])}")
+                if self.signal_data.shape[0] > 2:
+                    self.log.debug(f"Existing signal_data[2] min: {np.min(self.signal_data[2])}, max: {np.max(self.signal_data[2])}")
             
             self.analysis_results = {
                 'signal': signal,
@@ -436,7 +745,14 @@ class PulsedDataAnalysisLogic(LogicBase):
             }
             
             # Perform NV state analysis
-            self.analyze_nv_states()
+            try:
+                self.log.info("Starting NV state analysis")
+                self.analyze_nv_states()
+                self.log.info("NV state analysis completed successfully")
+            except Exception as e:
+                self.log.error(f"Error during NV state analysis: {str(e)}")
+                import traceback
+                self.log.error(f"Traceback: {traceback.format_exc()}")
             
             # Emit results
             self.sigAnalysisComplete.emit({
@@ -452,6 +768,16 @@ class PulsedDataAnalysisLogic(LogicBase):
             self.log.error(f"Error analyzing laser pulses: {str(e)}")
             import traceback
             self.log.error(f"Traceback: {traceback.format_exc()}")
+            
+            # Try to provide more specific error messages
+            error_msg = str(e).lower()
+            if "shape" in error_msg or "dimension" in error_msg:
+                self.log.error("This appears to be a data shape/dimension mismatch. Check if the laser data format is correct.")
+            elif "memory" in error_msg:
+                self.log.error("This appears to be a memory error. The data might be too large to process.")
+            elif "attribute" in error_msg:
+                self.log.error("This appears to be a missing attribute error. Check the pulse analyzer settings.")
+            
             return None, None
     
     def analyze_nv_states(self):
@@ -462,10 +788,22 @@ class PulsedDataAnalysisLogic(LogicBase):
         """
         if self.signal_data is None or self.signal_data.shape[0] < 2:
             self.log.error("No signal data available for NV state analysis")
+            self.log.debug(f"Signal data is {'None' if self.signal_data is None else f'available but has shape {self.signal_data.shape}'}")
             return None
         
         try:
             self.log.info(f"Analyzing NV states from signal data with shape {self.signal_data.shape}")
+            
+            # Validate signal data
+            if np.all(np.isnan(self.signal_data[1])):
+                self.log.error("All signal data values are NaN, cannot perform state analysis")
+                return None
+            
+            if np.all(self.signal_data[1] == 0):
+                self.log.error("All signal data values are zero, cannot perform meaningful state analysis")
+                return None
+                
+            self.log.debug(f"Signal data statistics: min={np.min(self.signal_data[1])}, max={np.max(self.signal_data[1])}, mean={np.mean(self.signal_data[1])}")
             
             # Get reference level
             reference = self._nv_reference_level
@@ -474,32 +812,92 @@ class PulsedDataAnalysisLogic(LogicBase):
                 reference = np.mean(self.signal_data[1])
                 self._nv_reference_level = reference
                 self.log.info(f"No reference level set, using mean value: {reference}")
+                self.log.debug(f"Calculated reference from all {len(self.signal_data[1])} data points")
             else:
                 self.log.info(f"Using existing reference level: {reference}")
+                
+            # Validate reference level
+            if reference <= 0:
+                self.log.warning(f"Reference level is not positive ({reference}), this may cause issues with thresholding")
+                # Try to recover by using mean if it's positive
+                mean_value = np.mean(self.signal_data[1])
+                if mean_value > 0:
+                    reference = mean_value
+                    self._nv_reference_level = reference
+                    self.log.info(f"Adjusted reference level to mean value: {reference}")
+                else:
+                    self.log.error("Could not determine a valid reference level, NV state analysis may be inaccurate")
             
             # Determine threshold value
             threshold = reference * self._nv_threshold
             self.log.info(f"Using threshold value: {threshold} (reference: {reference} * threshold factor: {self._nv_threshold})")
             
+            # Verify threshold is reasonable
+            if threshold <= 0:
+                self.log.error(f"Calculated threshold is not positive ({threshold}), cannot perform reliable state assignment")
+                return None
+                
+            min_signal = np.min(self.signal_data[1])
+            max_signal = np.max(self.signal_data[1])
+            
+            if threshold <= min_signal:
+                self.log.warning(f"Threshold ({threshold}) is less than or equal to minimum signal value ({min_signal})")
+                self.log.warning("All data points will be classified as ms=0 state, consider adjusting threshold")
+            elif threshold >= max_signal:
+                self.log.warning(f"Threshold ({threshold}) is greater than or equal to maximum signal value ({max_signal})")
+                self.log.warning("All data points will be classified as ms=-1/+1 state, consider adjusting threshold")
+            
             # Assign states based on threshold
             # If counts > threshold: ms=0 state (state=0)
             # If counts <= threshold: ms=-1 or ms=+1 state (state=1)
+            self.log.debug("Assigning states based on threshold")
             states = np.zeros_like(self.signal_data[1])
             states[self.signal_data[1] <= threshold] = 1
+            
+            # Log detailed info about the first few points for debugging
+            sample_size = min(10, len(states))
+            for i in range(sample_size):
+                self.log.debug(f"Point {i}: signal={self.signal_data[1][i]}, threshold={threshold}, assigned state={states[i]}")
             
             # Log how many points are assigned to each state
             ms0_count = np.sum(states == 0)
             ms1_count = np.sum(states == 1)
             self.log.info(f"Assigned states: ms=0: {ms0_count}, ms=-1/+1: {ms1_count}")
             
+            # Warn if state assignment is severely imbalanced
+            if ms0_count == 0 or ms1_count == 0:
+                self.log.warning("All data points were assigned to a single state!")
+                self.log.warning("This suggests an issue with the threshold setting or data quality")
+            elif ms0_count > 0 and ms1_count > 0:
+                ratio = max(ms0_count, ms1_count) / min(ms0_count, ms1_count)
+                if ratio > 10:
+                    self.log.warning(f"State assignment is highly imbalanced (ratio {ratio:.1f}:1)")
+                    self.log.warning("Consider adjusting the threshold or checking data quality")
+            
             self.nv_state_data = states
             
             # Calculate histogram and statistics
+            self.log.debug("Calculating state histogram and statistics")
             unique, counts = np.unique(states, return_counts=True)
             self.state_histogram = (unique, counts)
             
             total_counts = len(states)
             
+            # Check for possible state transitions by calculating state changes
+            if total_counts > 1:
+                state_changes = np.sum(np.abs(np.diff(states)))
+                change_percentage = (state_changes / (total_counts - 1)) * 100
+                self.log.info(f"Detected {state_changes} state transitions ({change_percentage:.1f}% of points)")
+                
+                # Look for potential data issues based on transition patterns
+                if change_percentage > 50:
+                    self.log.warning("High number of state transitions detected (>50% of points)")
+                    self.log.warning("This could indicate noise in the data or threshold set too close to the signal level")
+                elif change_percentage < 1 and ms0_count > 0 and ms1_count > 0:
+                    self.log.warning("Very few state transitions detected (<1% of points)")
+                    self.log.warning("This could indicate distinct populations that should be analyzed separately")
+            
+            # Compile detailed statistics
             self.state_statistics = {
                 'total_counts': total_counts,
                 'ms0_count': ms0_count,
@@ -507,10 +905,31 @@ class PulsedDataAnalysisLogic(LogicBase):
                 'ms0_percentage': (ms0_count / total_counts) * 100 if total_counts > 0 else 0,
                 'ms1_percentage': (ms1_count / total_counts) * 100 if total_counts > 0 else 0,
                 'threshold': threshold,
-                'reference_level': reference
+                'reference_level': reference,
+                'threshold_factor': self._nv_threshold,
+                'signal_min': min_signal,
+                'signal_max': max_signal,
+                'signal_mean': np.mean(self.signal_data[1]),
+                'signal_std': np.std(self.signal_data[1])
             }
             
-            self.log.info(f"NV state statistics: {self.state_statistics}")
+            # Calculate contrast if both states are present
+            if ms0_count > 0 and ms1_count > 0:
+                ms0_indices = np.where(states == 0)[0]
+                ms1_indices = np.where(states == 1)[0]
+                
+                ms0_mean = np.mean(self.signal_data[1][ms0_indices])
+                ms1_mean = np.mean(self.signal_data[1][ms1_indices])
+                
+                contrast = ((ms0_mean - ms1_mean) / (ms0_mean + ms1_mean)) * 100 if (ms0_mean + ms1_mean) > 0 else 0
+                self.state_statistics['ms0_mean'] = ms0_mean
+                self.state_statistics['ms1_mean'] = ms1_mean
+                self.state_statistics['contrast'] = contrast
+                
+                self.log.info(f"State contrast: {contrast:.2f}% (ms0 mean: {ms0_mean:.2f}, ms1 mean: {ms1_mean:.2f})")
+            
+            self.log.info(f"NV state statistics: ms0={self.state_statistics['ms0_percentage']:.1f}%, ms1={self.state_statistics['ms1_percentage']:.1f}%")
+            self.log.debug(f"Detailed statistics: {self.state_statistics}")
             
             # Emit histogram and statistics
             self.sigNvStateHistogramUpdated.emit(self.state_histogram, self.state_statistics)
@@ -521,6 +940,18 @@ class PulsedDataAnalysisLogic(LogicBase):
             self.log.error(f"Error analyzing NV states: {str(e)}")
             import traceback
             self.log.error(f"Traceback: {traceback.format_exc()}")
+            
+            # Try to provide more helpful error messages
+            error_msg = str(e).lower()
+            if "shape" in error_msg or "dimension" in error_msg:
+                self.log.error("This appears to be a data shape/dimension mismatch in the signal data.")
+            elif "nan" in error_msg or "infinity" in error_msg:
+                self.log.error("This appears to be an issue with NaN or infinite values in the data.")
+            elif "memory" in error_msg:
+                self.log.error("This appears to be a memory error. The data might be too large to process.")
+            elif "zero" in error_msg or "divide" in error_msg:
+                self.log.error("This appears to be a division by zero error, possibly due to signal values being zero.")
+            
             return None
     
     def set_nv_threshold(self, threshold):
