@@ -72,6 +72,12 @@ class PulsedDataAnalysisLogic(LogicBase):
                                            constructor=_data_storage_from_cfg_option)
     
     # Status variables
+    # Fast counter settings (needed by PulseExtractor)
+    __fast_counter_record_length = StatusVar(default=3.0e-6)
+    __fast_counter_binwidth = StatusVar(default=1.0e-9)
+    __fast_counter_gates = StatusVar(default=0)
+    
+    # NV state analysis settings
     _nv_threshold = StatusVar(default=0.7)  # Threshold for NV state identification
     _nv_reference_level = StatusVar(default=None)  # Reference level for ms=0
     _display_ms_minus1 = StatusVar(default=True)  # Whether to display ms=-1 state (True) or ms=+1 (False)
@@ -511,6 +517,16 @@ class PulsedDataAnalysisLogic(LogicBase):
         )
         
         return save_path
+    
+    @property
+    def fast_counter_settings(self):
+        """Return fast counter settings (required by PulseExtractor)"""
+        settings_dict = dict()
+        settings_dict['bin_width'] = float(self.__fast_counter_binwidth)
+        settings_dict['record_length'] = float(self.__fast_counter_record_length)
+        settings_dict['number_of_gates'] = int(self.__fast_counter_gates)
+        settings_dict['is_gated'] = False  # We don't have a real fast counter
+        return settings_dict
     
     @property
     def extraction_settings(self):
