@@ -60,8 +60,7 @@ class PulsedDataAnalysisLogic(LogicBase):
             pulseanalyzer: 'pulseanalyzer'
     """
     
-    # Connectors
-    _pulseanalyzer = Connector(interface='PulseAnalyzer', optional=True)
+    # No connectors needed as we instantiate helpers directly
     
     # Config options
     _default_data_storage_cls = ConfigOption(name='default_data_storage_type',
@@ -107,13 +106,9 @@ class PulsedDataAnalysisLogic(LogicBase):
         
     def on_activate(self):
         """Initializes the module when activated"""
+        # Directly create helper instances
         self._pulseextractor = PulseExtractor(pulsedmeasurementlogic=self)
-        
-        # Try to get the connector to the pulse analyzer or create own instance
-        try:
-            self._pulseanalyzer = self._pulseanalyzer()
-        except:
-            self._pulseanalyzer = PulseAnalyzer(pulsedmeasurementlogic=self)
+        self._pulseanalyzer = PulseAnalyzer(pulsedmeasurementlogic=self)
         
         # Initialize data containers
         self._initialize_data_containers()
