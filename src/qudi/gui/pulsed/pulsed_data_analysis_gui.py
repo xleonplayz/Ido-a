@@ -146,30 +146,73 @@ class PulsedDataAnalysisGui(GuiBase):
         """Add the three file selection buttons to the UI"""
         # Create a new widget to hold the file selection buttons
         file_selection_widget = QtWidgets.QWidget()
-        file_selection_layout = QtWidgets.QHBoxLayout()
+        file_selection_layout = QtWidgets.QVBoxLayout()
         file_selection_widget.setLayout(file_selection_layout)
+        
+        # Create the buttons container
+        buttons_widget = QtWidgets.QWidget()
+        buttons_layout = QtWidgets.QHBoxLayout()
+        buttons_layout.setContentsMargins(0, 0, 0, 0)
+        buttons_widget.setLayout(buttons_layout)
         
         # Create title label
         title_label = QtWidgets.QLabel("Select Files Individually:")
-        file_selection_layout.addWidget(title_label)
+        buttons_layout.addWidget(title_label)
         
         # Create the three buttons
         self._pulsed_file_button = QtWidgets.QPushButton("Open Pulsed Measurement")
         self._pulsed_file_button.setToolTip("Open a pulsed measurement file (_pulsed_measurement)")
-        file_selection_layout.addWidget(self._pulsed_file_button)
+        buttons_layout.addWidget(self._pulsed_file_button)
         
         self._raw_file_button = QtWidgets.QPushButton("Open Raw Data")
         self._raw_file_button.setToolTip("Open a raw timetrace file (_raw_timetrace)")
-        file_selection_layout.addWidget(self._raw_file_button)
+        buttons_layout.addWidget(self._raw_file_button)
         
         self._laser_file_button = QtWidgets.QPushButton("Open Laser Pulses")
         self._laser_file_button.setToolTip("Open a laser pulses file (_laser_pulses)")
-        file_selection_layout.addWidget(self._laser_file_button)
+        buttons_layout.addWidget(self._laser_file_button)
         
         # Add spacer to right-align the buttons
-        file_selection_layout.addItem(QtWidgets.QSpacerItem(40, 20, 
-                                       QtWidgets.QSizePolicy.Expanding, 
-                                       QtWidgets.QSizePolicy.Minimum))
+        buttons_layout.addItem(QtWidgets.QSpacerItem(40, 20, 
+                                QtWidgets.QSizePolicy.Expanding, 
+                                QtWidgets.QSizePolicy.Minimum))
+        
+        # Add the buttons widget to the main container
+        file_selection_layout.addWidget(buttons_widget)
+        
+        # Add a direct input line for problematic files
+        direct_input_widget = QtWidgets.QWidget()
+        direct_input_layout = QtWidgets.QHBoxLayout()
+        direct_input_layout.setContentsMargins(0, 0, 0, 0)
+        direct_input_widget.setLayout(direct_input_layout)
+        
+        # Add a help label
+        help_label = QtWidgets.QLabel("Problematic files? Enter paths directly:")
+        direct_input_layout.addWidget(help_label)
+        
+        # Create text inputs for file paths
+        self._pulsed_path_input = QtWidgets.QLineEdit()
+        self._pulsed_path_input.setPlaceholderText("Paste pulsed file path here")
+        self._raw_path_input = QtWidgets.QLineEdit()
+        self._raw_path_input.setPlaceholderText("Paste raw file path here")
+        self._laser_path_input = QtWidgets.QLineEdit()
+        self._laser_path_input.setPlaceholderText("Paste laser file path here")
+        
+        # Create a button to load the files
+        self._load_paths_button = QtWidgets.QPushButton("Load Files")
+        self._load_paths_button.setToolTip("Load all files from the entered paths")
+        
+        # Add all to layout
+        direct_input_layout.addWidget(self._pulsed_path_input)
+        direct_input_layout.addWidget(self._raw_path_input)
+        direct_input_layout.addWidget(self._laser_path_input)
+        direct_input_layout.addWidget(self._load_paths_button)
+        
+        # Add the direct input widget to the main container
+        file_selection_layout.addWidget(direct_input_widget)
+        
+        # Connect the load button
+        self._load_paths_button.clicked.connect(self.load_files_from_inputs)
         
         # Add the file selection widget to the main window
         # Insert it after the data tab's vertical layout
@@ -452,6 +495,68 @@ class PulsedDataAnalysisGui(GuiBase):
             
             # Update status
             self._mw.statusbar.showMessage(f"Loaded laser pulses file: {os.path.basename(file_path)}")
+            
+            # Update recent files menu
+            self._update_recent_files_menu()
+    
+    def load_files_from_inputs(self):
+        """Load files directly from the path inputs to handle problematic filenames"""
+        successful = False
+        
+        # Process pulsed file
+        pulsed_path = self._pulsed_path_input.text().strip()
+        if pulsed_path:
+            if os.path.isfile(pulsed_path):
+                self.sigOpenPulsedFile.emit(pulsed_path)
+                self._mw.statusbar.showMessage(f"Loading pulsed file: {os.path.basename(pulsed_path)}")
+                successful = True
+            else:
+                QtWidgets.QMessageBox.warning(
+                    self._mw,
+                    "File Not Found",
+                    f"The pulsed file could not be found at: {pulsed_path}"
+                )
+        
+        # Process raw file
+        raw_path = self._raw_path_input.text().strip()
+        if raw_path:
+            if os.path.isfile(raw_path):
+                self.sigOpenRawFile.emit(raw_path)
+                self._mw.statusbar.showMessage(f"Loading raw file: {os.path.basename(raw_path)}")
+                successful = True
+            else:
+                QtWidgets.QMessageBox.warning(
+                    self._mw,
+                    "File Not Found",
+                    f"The raw file could not be found at: {raw_path}"
+                )
+        
+        # Process laser file
+        laser_path = self._laser_path_input.text().strip()
+        if laser_path:
+            if os.path.isfile(laser_path):
+                self.sigOpenLaserFile.emit(laser_path)
+                self._mw.statusbar.showMessage(f"Loading laser file: {os.path.basename(laser_path)}")
+                successful = True
+            else:
+                QtWidgets.QMessageBox.warning(
+                    self._mw,
+                    "File Not Found",
+                    f"The laser file could not be found at: {laser_path}"
+                )
+        
+        # Show message if nothing was loaded
+        if not successful:
+            QtWidgets.QMessageBox.information(
+                self._mw,
+                "No Files Loaded",
+                "No valid file paths were provided. Please enter at least one valid file path."
+            )
+        else:
+            # Clear the inputs after successful loading
+            self._pulsed_path_input.clear()
+            self._raw_path_input.clear()
+            self._laser_path_input.clear()
             
             # Update recent files menu
             self._update_recent_files_menu()

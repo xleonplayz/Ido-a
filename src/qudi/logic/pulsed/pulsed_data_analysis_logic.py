@@ -158,6 +158,41 @@ class PulsedDataAnalysisLogic(LogicBase):
         self.state_histogram = None
         self.state_statistics = {}
     
+    def validate_pulsed_measurement_data(self, data):
+        """
+        Validate if the loaded data has the correct format for pulsed measurement data
+        
+        @param ndarray data: The data to validate
+        @return tuple: (is_valid, error_message)
+        """
+        # Check if data is None
+        if data is None:
+            return False, "Data is None"
+            
+        # Check if data is numpy array
+        if not isinstance(data, np.ndarray):
+            return False, f"Data is not a numpy array but {type(data)}"
+        
+        # Basic dimensionality check
+        if data.ndim < 2:
+            return False, f"Data must be at least 2-dimensional, but has {data.ndim} dimensions"
+            
+        # For pulsed measurement, we expect data with at least 2 columns (x and y values)
+        if data.shape[1] < 2:  # Note: we check before transpose
+            return False, f"Pulsed measurement data must have at least 2 columns, but has {data.shape[1]}"
+            
+        # Check data types
+        if not np.issubdtype(data.dtype, np.number):
+            return False, f"Data must contain numeric values, but has dtype {data.dtype}"
+            
+        # Check for NaN or infinite values
+        if np.any(np.isnan(data)) or np.any(np.isinf(data)):
+            return False, "Data contains NaN or infinite values"
+            
+        # Additional checks specific to your application could be added here
+        
+        return True, "Data is valid for pulsed measurement"
+    
     def load_pulsed_file(self, file_path):
         """
         Load data specifically from a pulsed measurement file
@@ -194,9 +229,28 @@ class PulsedDataAnalysisLogic(LogicBase):
             data, metadata = storage.load_data(file_path)
             self.log.info(f"Successfully loaded pulsed measurement data from {file_path}")
             
+            # Extra debug information
+            self.log.info(f"Loaded data shape: {data.shape}, type: {data.dtype}")
+            self.log.info(f"Data sample (first 5 values): {data.flatten()[:5]}")
+            
+            # Validate the data
+            is_valid, validation_message = self.validate_pulsed_measurement_data(data)
+            if not is_valid:
+                self.log.error(f"Validation failed for pulsed measurement data: {validation_message}")
+                self.log.error("Please check if this is the correct file type.")
+                return None
+            
+            self.log.info(f"Data validation passed: {validation_message}")
+            
             # Set as signal data (pulsed measurement data)
             self.signal_data = data.T  # Transpose to match expected format
             self.metadata = metadata
+            
+            # Verify data was properly set
+            if self.signal_data is None:
+                self.log.error("Failed to set signal_data variable after loading")
+            else:
+                self.log.info(f"Signal data set successfully with shape: {self.signal_data.shape}")
             
             # Add to recent files list
             if file_path in self._recent_files:
@@ -223,6 +277,47 @@ class PulsedDataAnalysisLogic(LogicBase):
             self.log.error(f"Traceback: {traceback.format_exc()}")
             return None
             
+    def validate_raw_timetrace_data(self, data):
+        """
+        Validate if the loaded data has the correct format for raw timetrace data
+        
+        @param ndarray data: The data to validate
+        @return tuple: (is_valid, error_message)
+        """
+        # Check if data is None
+        if data is None:
+            return False, "Data is None"
+            
+        # Check if data is numpy array
+        if not isinstance(data, np.ndarray):
+            return False, f"Data is not a numpy array but {type(data)}"
+        
+        # For raw time trace, we expect a 1D array or a 2D array that can be squeezed to 1D
+        if data.ndim > 2:
+            return False, f"Raw timetrace data must be 1D or 2D, but has {data.ndim} dimensions"
+            
+        # Check data size - raw data should have significant number of points
+        if data.size < 100:  # Arbitrary threshold, adjust as needed
+            return False, f"Raw timetrace data has only {data.size} points, which seems too few"
+            
+        # Check data types
+        if not np.issubdtype(data.dtype, np.number):
+            return False, f"Data must contain numeric values, but has dtype {data.dtype}"
+            
+        # Check for NaN or infinite values
+        if np.any(np.isnan(data)) or np.any(np.isinf(data)):
+            return False, "Data contains NaN or infinite values"
+            
+        # Check for all zeros
+        if np.all(data == 0):
+            return False, "Raw data contains only zeros"
+            
+        # For time trace data, we might expect some variation in the signal
+        if np.std(data) < 1e-10:  # Very small standard deviation
+            return False, "Raw data has almost no variation, which is unusual for time trace data"
+        
+        return True, "Data is valid for raw timetrace"
+    
     def load_raw_file(self, file_path):
         """
         Load data specifically from a raw timetrace file
@@ -259,8 +354,27 @@ class PulsedDataAnalysisLogic(LogicBase):
             data, metadata = storage.load_data(file_path)
             self.log.info(f"Successfully loaded raw timetrace data from {file_path}")
             
+            # Extra debug information
+            self.log.info(f"Loaded data shape: {data.shape}, type: {data.dtype}")
+            self.log.info(f"Data sample (first 5 values): {data.flatten()[:5]}")
+            
+            # Validate the data
+            is_valid, validation_message = self.validate_raw_timetrace_data(data)
+            if not is_valid:
+                self.log.error(f"Validation failed for raw timetrace data: {validation_message}")
+                self.log.error("Please check if this is the correct file type.")
+                return None
+            
+            self.log.info(f"Data validation passed: {validation_message}")
+            
             # Set as raw data
             self.raw_data = data.squeeze()
+            
+            # Verify data was properly set
+            if self.raw_data is None:
+                self.log.error("Failed to set raw_data variable after loading")
+            else:
+                self.log.info(f"Raw data set successfully with shape: {self.raw_data.shape}")
             
             # Update metadata
             if not self.metadata:
@@ -293,6 +407,65 @@ class PulsedDataAnalysisLogic(LogicBase):
             self.log.error(f"Traceback: {traceback.format_exc()}")
             return None
             
+    def validate_laser_pulses_data(self, data):
+        """
+        Validate if the loaded data has the correct format for laser pulses data
+        
+        @param ndarray data: The data to validate
+        @return tuple: (is_valid, error_message)
+        """
+        # Check if data is None
+        if data is None:
+            return False, "Data is None"
+            
+        # Check if data is numpy array
+        if not isinstance(data, np.ndarray):
+            return False, f"Data is not a numpy array but {type(data)}"
+        
+        # For laser pulses, we expect a 2D array (multiple pulses, each with multiple time points)
+        if data.ndim != 2:
+            return False, f"Laser pulses data must be 2D, but has {data.ndim} dimensions"
+            
+        # Check that we have a reasonable number of pulses and time points
+        if data.shape[0] < 1:
+            return False, "No laser pulses found in data"
+            
+        if data.shape[1] < 10:  # Expecting at least some time points per pulse
+            return False, f"Laser pulses have only {data.shape[1]} time points, which seems too few"
+            
+        # Check data types
+        if not np.issubdtype(data.dtype, np.number):
+            return False, f"Data must contain numeric values, but has dtype {data.dtype}"
+            
+        # Check for NaN or infinite values
+        if np.any(np.isnan(data)) or np.any(np.isinf(data)):
+            return False, "Data contains NaN or infinite values"
+            
+        # Check for all zeros
+        if np.all(data == 0):
+            return False, "Laser pulses data contains only zeros"
+            
+        # For laser pulses, we expect non-negative counts
+        if np.any(data < 0):
+            return False, "Laser pulses data contains negative values, which is invalid for count data"
+            
+        # For laser pulses, we expect some pulses to have non-zero values
+        # Count pulses with significant counts (sum > 0)
+        pulses_with_counts = np.sum(np.sum(data, axis=1) > 0)
+        if pulses_with_counts == 0:
+            return False, "No laser pulses have any counts"
+            
+        # Additional check: For most laser pulse data, the pulses should have similar shapes
+        # Calculate variation in pulse height (max value per pulse)
+        pulse_heights = np.max(data, axis=1)
+        if pulse_heights.size > 1:  # Only if we have more than one pulse
+            height_variation = np.std(pulse_heights) / np.mean(pulse_heights)
+            if height_variation > 5.0:  # Very high variation
+                self.log.warning(f"Unusual variation in laser pulse heights: {height_variation:.2f}")
+                # Don't fail validation, just warn
+        
+        return True, "Data is valid for laser pulses"
+    
     def load_laser_file(self, file_path):
         """
         Load data specifically from a laser pulses file
@@ -329,8 +502,27 @@ class PulsedDataAnalysisLogic(LogicBase):
             data, metadata = storage.load_data(file_path)
             self.log.info(f"Successfully loaded laser pulses data from {file_path}")
             
+            # Extra debug information
+            self.log.info(f"Loaded data shape: {data.shape}, type: {data.dtype}")
+            self.log.info(f"Data sample (first 5 values): {data.flatten()[:5]}")
+            
+            # Validate the data
+            is_valid, validation_message = self.validate_laser_pulses_data(data)
+            if not is_valid:
+                self.log.error(f"Validation failed for laser pulses data: {validation_message}")
+                self.log.error("Please check if this is the correct file type.")
+                return None
+            
+            self.log.info(f"Data validation passed: {validation_message}")
+            
             # Set as laser data
             self.laser_data = data
+            
+            # Verify data was properly set
+            if self.laser_data is None:
+                self.log.error("Failed to set laser_data variable after loading")
+            else:
+                self.log.info(f"Laser data set successfully with shape: {self.laser_data.shape}")
             
             # Update metadata
             if not self.metadata:
