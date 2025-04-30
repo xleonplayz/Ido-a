@@ -577,15 +577,39 @@ class PulsedDataAnalysisGui(GuiBase):
         laser_path = self._laser_path_input.text().strip()
         if laser_path:
             if os.path.isfile(laser_path):
+                self.log.info(f"Loading laser file from direct input: {laser_path}")
                 self.sigOpenLaserFile.emit(laser_path)
                 self._mw.statusbar.showMessage(f"Loading laser file: {os.path.basename(laser_path)}")
                 successful = True
             else:
-                QtWidgets.QMessageBox.warning(
-                    self._mw,
-                    "File Not Found",
-                    f"The laser file could not be found at: {laser_path}"
-                )
+                # If file not found, try auto-correction for space issues
+                directory = os.path.dirname(laser_path)
+                filename = os.path.basename(laser_path)
+                
+                # Handle the specific pattern we're seeing with spaces in "_IIII laser_pulses.dat"
+                if " laser_pulses" in filename:
+                    corrected_filename = filename.replace(" laser_pulses", "_laser_pulses")
+                    corrected_path = os.path.join(directory, corrected_filename)
+                    self.log.info(f"Trying corrected path for laser file: {corrected_path}")
+                    
+                    if os.path.isfile(corrected_path):
+                        self.log.info(f"Found laser file at corrected path: {corrected_path}")
+                        self.sigOpenLaserFile.emit(corrected_path)
+                        self._mw.statusbar.showMessage(f"Loading laser file (corrected path): {corrected_filename}")
+                        successful = True
+                    else:
+                        QtWidgets.QMessageBox.warning(
+                            self._mw,
+                            "File Not Found",
+                            f"The laser file could not be found at: {laser_path}\n"
+                            f"Also tried corrected path: {corrected_path}"
+                        )
+                else:
+                    QtWidgets.QMessageBox.warning(
+                        self._mw,
+                        "File Not Found",
+                        f"The laser file could not be found at: {laser_path}"
+                    )
         
         # Show message if nothing was loaded
         if not successful:
@@ -956,13 +980,18 @@ class PulsedDataAnalysisGui(GuiBase):
             data_info = {
                 'has_raw_data': self._analysis_logic().raw_data is not None,
                 'has_laser_data': self._analysis_logic().laser_data is not None,
-                'has_signal_data': self._analysis_logic().signal_data is not None
+                'has_signal_data': self._analysis_logic().signal_data is not None,
+                'pulsed_valid': self._analysis_logic()._pulsed_file_valid,
+                'raw_valid': self._analysis_logic()._raw_file_valid,
+                'laser_valid': self._analysis_logic()._laser_file_valid
             }
-            
-        # Get validation status from logic (if available)
-        signal_valid = self._analysis_logic()._pulsed_file_valid if hasattr(self._analysis_logic(), '_pulsed_file_valid') else False
-        raw_valid = self._analysis_logic()._raw_file_valid if hasattr(self._analysis_logic(), '_raw_file_valid') else False
-        laser_valid = self._analysis_logic()._laser_file_valid if hasattr(self._analysis_logic(), '_laser_file_valid') else False
+        
+        # Get validation status from the data_info if available, otherwise from logic
+        signal_valid = data_info.get('pulsed_valid', False)
+        raw_valid = data_info.get('raw_valid', False)
+        laser_valid = data_info.get('laser_valid', False)
+        
+        self.log.info(f"Updating file status indicators - Signal: {signal_valid}, Raw: {raw_valid}, Laser: {laser_valid}")
         
         # Update pulsed data status
         if data_info['has_signal_data']:
