@@ -122,6 +122,11 @@ class PulsedDataAnalysisLogic(LogicBase):
         self.current_file_path = None
         self.current_file_type = None
         
+        # Validation status for files
+        self._pulsed_file_valid = False
+        self._raw_file_valid = False
+        self._laser_file_valid = False
+        
         # Create pulse extractor and analyzer instances
         self._pulseextractor = None
         self._pulseanalyzer = None
@@ -157,6 +162,11 @@ class PulsedDataAnalysisLogic(LogicBase):
         self.nv_state_data = None
         self.state_histogram = None
         self.state_statistics = {}
+        
+        # Reset validation status
+        self._pulsed_file_valid = False
+        self._raw_file_valid = False
+        self._laser_file_valid = False
     
     def validate_pulsed_measurement_data(self, data):
         """
@@ -238,8 +248,10 @@ class PulsedDataAnalysisLogic(LogicBase):
             if not is_valid:
                 self.log.error(f"Validation failed for pulsed measurement data: {validation_message}")
                 self.log.error("Please check if this is the correct file type.")
+                self._pulsed_file_valid = False
                 return None
             
+            self._pulsed_file_valid = True
             self.log.info(f"Data validation passed: {validation_message}")
             
             # Set as signal data (pulsed measurement data)
@@ -363,8 +375,10 @@ class PulsedDataAnalysisLogic(LogicBase):
             if not is_valid:
                 self.log.error(f"Validation failed for raw timetrace data: {validation_message}")
                 self.log.error("Please check if this is the correct file type.")
+                self._raw_file_valid = False
                 return None
             
+            self._raw_file_valid = True
             self.log.info(f"Data validation passed: {validation_message}")
             
             # Set as raw data
@@ -511,8 +525,10 @@ class PulsedDataAnalysisLogic(LogicBase):
             if not is_valid:
                 self.log.error(f"Validation failed for laser pulses data: {validation_message}")
                 self.log.error("Please check if this is the correct file type.")
+                self._laser_file_valid = False
                 return None
             
+            self._laser_file_valid = True
             self.log.info(f"Data validation passed: {validation_message}")
             
             # Set as laser data

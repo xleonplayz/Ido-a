@@ -139,6 +139,9 @@ class PulsedDataAnalysisGui(GuiBase):
             # Create selection region if there was one saved
             self._create_data_selection_region(*self._data_selection_range)
         
+        # Initialize file status indicators
+        self.update_file_status_indicators()
+        
         # Show window
         self.show()
     
@@ -159,18 +162,57 @@ class PulsedDataAnalysisGui(GuiBase):
         title_label = QtWidgets.QLabel("Select Files Individually:")
         buttons_layout.addWidget(title_label)
         
-        # Create the three buttons
+        # Create the buttons with status indicators
+        button_container1 = QtWidgets.QWidget()
+        button_layout1 = QtWidgets.QHBoxLayout()
+        button_layout1.setContentsMargins(0, 0, 0, 0)
+        button_layout1.setSpacing(5)
+        button_container1.setLayout(button_layout1)
+        
         self._pulsed_file_button = QtWidgets.QPushButton("Open Pulsed Measurement")
         self._pulsed_file_button.setToolTip("Open a pulsed measurement file (_pulsed_measurement)")
-        buttons_layout.addWidget(self._pulsed_file_button)
+        self._pulsed_status = QtWidgets.QLabel()
+        self._pulsed_status.setFixedSize(16, 16)
+        self._pulsed_status.setStyleSheet("background-color: gray; border-radius: 8px;")
+        self._pulsed_status.setToolTip("File status: Not loaded")
+        
+        button_layout1.addWidget(self._pulsed_file_button)
+        button_layout1.addWidget(self._pulsed_status)
+        buttons_layout.addWidget(button_container1)
+        
+        button_container2 = QtWidgets.QWidget()
+        button_layout2 = QtWidgets.QHBoxLayout()
+        button_layout2.setContentsMargins(0, 0, 0, 0)
+        button_layout2.setSpacing(5)
+        button_container2.setLayout(button_layout2)
         
         self._raw_file_button = QtWidgets.QPushButton("Open Raw Data")
         self._raw_file_button.setToolTip("Open a raw timetrace file (_raw_timetrace)")
-        buttons_layout.addWidget(self._raw_file_button)
+        self._raw_status = QtWidgets.QLabel()
+        self._raw_status.setFixedSize(16, 16)
+        self._raw_status.setStyleSheet("background-color: gray; border-radius: 8px;")
+        self._raw_status.setToolTip("File status: Not loaded")
+        
+        button_layout2.addWidget(self._raw_file_button)
+        button_layout2.addWidget(self._raw_status)
+        buttons_layout.addWidget(button_container2)
+        
+        button_container3 = QtWidgets.QWidget()
+        button_layout3 = QtWidgets.QHBoxLayout()
+        button_layout3.setContentsMargins(0, 0, 0, 0)
+        button_layout3.setSpacing(5)
+        button_container3.setLayout(button_layout3)
         
         self._laser_file_button = QtWidgets.QPushButton("Open Laser Pulses")
         self._laser_file_button.setToolTip("Open a laser pulses file (_laser_pulses)")
-        buttons_layout.addWidget(self._laser_file_button)
+        self._laser_status = QtWidgets.QLabel()
+        self._laser_status.setFixedSize(16, 16)
+        self._laser_status.setStyleSheet("background-color: gray; border-radius: 8px;")
+        self._laser_status.setToolTip("File status: Not loaded")
+        
+        button_layout3.addWidget(self._laser_file_button)
+        button_layout3.addWidget(self._laser_status)
+        buttons_layout.addWidget(button_container3)
         
         # Add spacer to right-align the buttons
         buttons_layout.addItem(QtWidgets.QSpacerItem(40, 20, 
@@ -907,6 +949,57 @@ class PulsedDataAnalysisGui(GuiBase):
         # Close dialog
         self._nv_settings_dialog.accept()
     
+    def update_file_status_indicators(self, data_info=None):
+        """Update the file status indicators based on loaded data"""
+        # If no data info provided, get it from the logic module
+        if data_info is None:
+            data_info = {
+                'has_raw_data': self._analysis_logic().raw_data is not None,
+                'has_laser_data': self._analysis_logic().laser_data is not None,
+                'has_signal_data': self._analysis_logic().signal_data is not None
+            }
+            
+        # Get validation status from logic (if available)
+        signal_valid = self._analysis_logic()._pulsed_file_valid if hasattr(self._analysis_logic(), '_pulsed_file_valid') else False
+        raw_valid = self._analysis_logic()._raw_file_valid if hasattr(self._analysis_logic(), '_raw_file_valid') else False
+        laser_valid = self._analysis_logic()._laser_file_valid if hasattr(self._analysis_logic(), '_laser_file_valid') else False
+        
+        # Update pulsed data status
+        if data_info['has_signal_data']:
+            if signal_valid:
+                self._pulsed_status.setStyleSheet("background-color: green; border-radius: 8px;")
+                self._pulsed_status.setToolTip("Pulsed measurement data loaded and valid")
+            else:
+                self._pulsed_status.setStyleSheet("background-color: orange; border-radius: 8px;")
+                self._pulsed_status.setToolTip("Pulsed measurement data loaded but may have issues")
+        else:
+            self._pulsed_status.setStyleSheet("background-color: gray; border-radius: 8px;")
+            self._pulsed_status.setToolTip("No pulsed measurement data loaded")
+            
+        # Update raw data status
+        if data_info['has_raw_data']:
+            if raw_valid:
+                self._raw_status.setStyleSheet("background-color: green; border-radius: 8px;")
+                self._raw_status.setToolTip("Raw timetrace data loaded and valid")
+            else:
+                self._raw_status.setStyleSheet("background-color: orange; border-radius: 8px;")
+                self._raw_status.setToolTip("Raw timetrace data loaded but may have issues")
+        else:
+            self._raw_status.setStyleSheet("background-color: gray; border-radius: 8px;")
+            self._raw_status.setToolTip("No raw timetrace data loaded")
+            
+        # Update laser data status
+        if data_info['has_laser_data']:
+            if laser_valid:
+                self._laser_status.setStyleSheet("background-color: green; border-radius: 8px;")
+                self._laser_status.setToolTip("Laser pulses data loaded and valid")
+            else:
+                self._laser_status.setStyleSheet("background-color: orange; border-radius: 8px;")
+                self._laser_status.setToolTip("Laser pulses data loaded but may have issues")
+        else:
+            self._laser_status.setStyleSheet("background-color: gray; border-radius: 8px;")
+            self._laser_status.setToolTip("No laser pulses data loaded")
+    
     def update_data_display(self, data_info):
         """Update the data display with the loaded data"""
         # Clear any existing plots
@@ -914,6 +1007,9 @@ class PulsedDataAnalysisGui(GuiBase):
         
         # Show status in statusbar
         self._mw.statusbar.showMessage(f"Loaded {os.path.basename(data_info['file_path'])}")
+        
+        # Update file status indicators
+        self.update_file_status_indicators(data_info)
         
         # Get data from logic
         if data_info['has_signal_data']:
