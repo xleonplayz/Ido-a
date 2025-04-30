@@ -146,115 +146,100 @@ class PulsedDataAnalysisGui(GuiBase):
         self.show()
     
     def _add_file_selection_buttons(self):
-        """Add the three file selection buttons to the UI"""
-        # Create a new widget to hold the file selection buttons
+        """Add the file selection UI to the interface"""
+        # Create a new widget to hold the file selection UI
         file_selection_widget = QtWidgets.QWidget()
         file_selection_layout = QtWidgets.QVBoxLayout()
         file_selection_widget.setLayout(file_selection_layout)
         
-        # Create the buttons container
-        buttons_widget = QtWidgets.QWidget()
-        buttons_layout = QtWidgets.QHBoxLayout()
-        buttons_layout.setContentsMargins(0, 0, 0, 0)
-        buttons_widget.setLayout(buttons_layout)
+        # Create a group box for file selection
+        file_group_box = QtWidgets.QGroupBox("Data Files")
+        file_group_layout = QtWidgets.QGridLayout()
+        file_group_box.setLayout(file_group_layout)
         
-        # Create title label
-        title_label = QtWidgets.QLabel("Select Files Individually:")
-        buttons_layout.addWidget(title_label)
-        
-        # Create the buttons with status indicators
-        button_container1 = QtWidgets.QWidget()
-        button_layout1 = QtWidgets.QHBoxLayout()
-        button_layout1.setContentsMargins(0, 0, 0, 0)
-        button_layout1.setSpacing(5)
-        button_container1.setLayout(button_layout1)
-        
-        self._pulsed_file_button = QtWidgets.QPushButton("Open Pulsed Measurement")
+        # Row 1: Pulsed Measurement File
+        pulsed_label = QtWidgets.QLabel("Pulsed Measurement:")
+        self._pulsed_file_button = QtWidgets.QPushButton("Browse...")
         self._pulsed_file_button.setToolTip("Open a pulsed measurement file (_pulsed_measurement)")
+        self._pulsed_path_input = QtWidgets.QLineEdit()
+        self._pulsed_path_input.setPlaceholderText("Path to pulsed measurement file")
         self._pulsed_status = QtWidgets.QLabel()
         self._pulsed_status.setFixedSize(16, 16)
         self._pulsed_status.setStyleSheet("background-color: gray; border-radius: 8px;")
         self._pulsed_status.setToolTip("File status: Not loaded")
         
-        button_layout1.addWidget(self._pulsed_file_button)
-        button_layout1.addWidget(self._pulsed_status)
-        buttons_layout.addWidget(button_container1)
+        file_group_layout.addWidget(pulsed_label, 0, 0)
+        file_group_layout.addWidget(self._pulsed_path_input, 0, 1)
+        file_group_layout.addWidget(self._pulsed_file_button, 0, 2)
+        file_group_layout.addWidget(self._pulsed_status, 0, 3)
         
-        button_container2 = QtWidgets.QWidget()
-        button_layout2 = QtWidgets.QHBoxLayout()
-        button_layout2.setContentsMargins(0, 0, 0, 0)
-        button_layout2.setSpacing(5)
-        button_container2.setLayout(button_layout2)
-        
-        self._raw_file_button = QtWidgets.QPushButton("Open Raw Data")
+        # Row 2: Raw Data File
+        raw_label = QtWidgets.QLabel("Raw Timetrace:")
+        self._raw_file_button = QtWidgets.QPushButton("Browse...")
         self._raw_file_button.setToolTip("Open a raw timetrace file (_raw_timetrace)")
+        self._raw_path_input = QtWidgets.QLineEdit()
+        self._raw_path_input.setPlaceholderText("Path to raw timetrace file")
         self._raw_status = QtWidgets.QLabel()
         self._raw_status.setFixedSize(16, 16)
         self._raw_status.setStyleSheet("background-color: gray; border-radius: 8px;")
         self._raw_status.setToolTip("File status: Not loaded")
         
-        button_layout2.addWidget(self._raw_file_button)
-        button_layout2.addWidget(self._raw_status)
-        buttons_layout.addWidget(button_container2)
+        file_group_layout.addWidget(raw_label, 1, 0)
+        file_group_layout.addWidget(self._raw_path_input, 1, 1)
+        file_group_layout.addWidget(self._raw_file_button, 1, 2)
+        file_group_layout.addWidget(self._raw_status, 1, 3)
         
-        button_container3 = QtWidgets.QWidget()
-        button_layout3 = QtWidgets.QHBoxLayout()
-        button_layout3.setContentsMargins(0, 0, 0, 0)
-        button_layout3.setSpacing(5)
-        button_container3.setLayout(button_layout3)
-        
-        self._laser_file_button = QtWidgets.QPushButton("Open Laser Pulses")
+        # Row 3: Laser Pulses File
+        laser_label = QtWidgets.QLabel("Laser Pulses:")
+        self._laser_file_button = QtWidgets.QPushButton("Browse...")
         self._laser_file_button.setToolTip("Open a laser pulses file (_laser_pulses)")
+        self._laser_path_input = QtWidgets.QLineEdit()
+        self._laser_path_input.setPlaceholderText("Path to laser pulses file")
         self._laser_status = QtWidgets.QLabel()
         self._laser_status.setFixedSize(16, 16)
         self._laser_status.setStyleSheet("background-color: gray; border-radius: 8px;")
         self._laser_status.setToolTip("File status: Not loaded")
         
-        button_layout3.addWidget(self._laser_file_button)
-        button_layout3.addWidget(self._laser_status)
-        buttons_layout.addWidget(button_container3)
+        file_group_layout.addWidget(laser_label, 2, 0)
+        file_group_layout.addWidget(self._laser_path_input, 2, 1)
+        file_group_layout.addWidget(self._laser_file_button, 2, 2)
+        file_group_layout.addWidget(self._laser_status, 2, 3)
         
-        # Add spacer to right-align the buttons
-        buttons_layout.addItem(QtWidgets.QSpacerItem(40, 20, 
-                                QtWidgets.QSizePolicy.Expanding, 
-                                QtWidgets.QSizePolicy.Minimum))
-        
-        # Add the buttons widget to the main container
-        file_selection_layout.addWidget(buttons_widget)
-        
-        # Add a direct input line for problematic files
-        direct_input_widget = QtWidgets.QWidget()
-        direct_input_layout = QtWidgets.QHBoxLayout()
-        direct_input_layout.setContentsMargins(0, 0, 0, 0)
-        direct_input_widget.setLayout(direct_input_layout)
-        
-        # Add a help label
-        help_label = QtWidgets.QLabel("Problematic files? Enter paths directly:")
-        direct_input_layout.addWidget(help_label)
-        
-        # Create text inputs for file paths
-        self._pulsed_path_input = QtWidgets.QLineEdit()
-        self._pulsed_path_input.setPlaceholderText("Paste pulsed file path here")
-        self._raw_path_input = QtWidgets.QLineEdit()
-        self._raw_path_input.setPlaceholderText("Paste raw file path here")
-        self._laser_path_input = QtWidgets.QLineEdit()
-        self._laser_path_input.setPlaceholderText("Paste laser file path here")
-        
-        # Create a button to load the files
+        # Row 4: Load button
         self._load_paths_button = QtWidgets.QPushButton("Load Files")
         self._load_paths_button.setToolTip("Load all files from the entered paths")
+        self._load_paths_button.setStyleSheet("font-weight: bold;")
         
-        # Add all to layout
-        direct_input_layout.addWidget(self._pulsed_path_input)
-        direct_input_layout.addWidget(self._raw_path_input)
-        direct_input_layout.addWidget(self._laser_path_input)
-        direct_input_layout.addWidget(self._load_paths_button)
+        # Add a horizontal layout for the load button and auto-detect checkbox
+        load_layout = QtWidgets.QHBoxLayout()
+        self._auto_detect_checkbox = QtWidgets.QCheckBox("Auto-detect related files")
+        self._auto_detect_checkbox.setChecked(True)
+        self._auto_detect_checkbox.setToolTip("Automatically find related files based on the file naming pattern")
         
-        # Add the direct input widget to the main container
-        file_selection_layout.addWidget(direct_input_widget)
+        load_layout.addWidget(self._load_paths_button)
+        load_layout.addWidget(self._auto_detect_checkbox)
+        load_layout.addStretch()
         
-        # Connect the load button
+        file_group_layout.addLayout(load_layout, 3, 0, 1, 4)
+        
+        # Add a column stretch to make the path input expand horizontally
+        file_group_layout.setColumnStretch(1, 1)
+        
+        # Add the group box to the main layout
+        file_selection_layout.addWidget(file_group_box)
+        
+        # Connect the browse buttons to open file dialogs
+        self._pulsed_file_button.clicked.connect(self.open_pulsed_file_dialog)
+        self._raw_file_button.clicked.connect(self.open_raw_file_dialog)
+        self._laser_file_button.clicked.connect(self.open_laser_file_dialog)
+        
+        # Connect the load button to load files from inputs
         self._load_paths_button.clicked.connect(self.load_files_from_inputs)
+        
+        # Connect the path inputs to auto-load on edit finished if auto-detect is checked
+        self._pulsed_path_input.editingFinished.connect(self._path_input_changed)
+        self._raw_path_input.editingFinished.connect(self._path_input_changed)
+        self._laser_path_input.editingFinished.connect(self._path_input_changed)
         
         # Add the file selection widget to the main window
         # Insert it after the data tab's vertical layout
@@ -457,6 +442,126 @@ class PulsedDataAnalysisGui(GuiBase):
             # Update recent files menu
             self._update_recent_files_menu()
     
+    def _path_input_changed(self):
+        """Handle when a path input has been edited and completed"""
+        if not self._auto_detect_checkbox.isChecked():
+            return
+            
+        # Find out which input field was edited
+        sender = self.sender()
+        
+        if sender == self._pulsed_path_input:
+            file_path = self._pulsed_path_input.text().strip()
+            if file_path and os.path.isfile(file_path):
+                self._auto_detect_related_files(file_path, 'pulsed')
+                
+        elif sender == self._raw_path_input:
+            file_path = self._raw_path_input.text().strip()
+            if file_path and os.path.isfile(file_path):
+                self._auto_detect_related_files(file_path, 'raw')
+                
+        elif sender == self._laser_path_input:
+            file_path = self._laser_path_input.text().strip()
+            if file_path and os.path.isfile(file_path):
+                self._auto_detect_related_files(file_path, 'laser')
+    
+    def _auto_detect_related_files(self, file_path, file_type):
+        """Attempt to automatically detect related files based on the file naming pattern
+        
+        @param str file_path: Path to the file that was loaded
+        @param str file_type: Type of the file ('pulsed', 'raw', or 'laser')
+        """
+        self.log.info(f"Auto-detecting related files for {file_type} file: {file_path}")
+        
+        # Get file basename and directory
+        dirname = os.path.dirname(file_path)
+        basename = os.path.basename(file_path)
+        
+        # Handle different file type suffixes
+        if file_type == 'pulsed':
+            # Try to extract the base file pattern by removing the pulsed suffix
+            for suffix in ["_pulsed_measurement", " pulsed_measurement", "_pulsedmeasurement"]:
+                if suffix in basename:
+                    base_pattern = basename.replace(suffix, "")
+                    break
+            else:
+                # No known suffix found, try to use the filename without extension
+                base_pattern = os.path.splitext(basename)[0]
+            
+            # Set the current file in the input field
+            self._pulsed_path_input.setText(file_path)
+            
+            # Look for corresponding raw and laser files
+            for raw_suffix in ["_raw_timetrace", " raw_timetrace", "_rawtimetrace"]:
+                raw_filename = base_pattern + raw_suffix + os.path.splitext(basename)[1]
+                raw_path = os.path.join(dirname, raw_filename)
+                if os.path.isfile(raw_path):
+                    self._raw_path_input.setText(raw_path)
+                    break
+            
+            for laser_suffix in ["_laser_pulses", " laser_pulses", "_laserpulses"]:
+                laser_filename = base_pattern + laser_suffix + os.path.splitext(basename)[1]
+                laser_path = os.path.join(dirname, laser_filename)
+                if os.path.isfile(laser_path):
+                    self._laser_path_input.setText(laser_path)
+                    break
+                    
+        elif file_type == 'raw':
+            # Try to extract the base file pattern by removing the raw suffix
+            for suffix in ["_raw_timetrace", " raw_timetrace", "_rawtimetrace"]:
+                if suffix in basename:
+                    base_pattern = basename.replace(suffix, "")
+                    break
+            else:
+                # No known suffix found, try to use the filename without extension
+                base_pattern = os.path.splitext(basename)[0]
+            
+            # Set the current file in the input field
+            self._raw_path_input.setText(file_path)
+            
+            # Look for corresponding pulsed and laser files
+            for pulsed_suffix in ["_pulsed_measurement", " pulsed_measurement", "_pulsedmeasurement"]:
+                pulsed_filename = base_pattern + pulsed_suffix + os.path.splitext(basename)[1]
+                pulsed_path = os.path.join(dirname, pulsed_filename)
+                if os.path.isfile(pulsed_path):
+                    self._pulsed_path_input.setText(pulsed_path)
+                    break
+            
+            for laser_suffix in ["_laser_pulses", " laser_pulses", "_laserpulses"]:
+                laser_filename = base_pattern + laser_suffix + os.path.splitext(basename)[1]
+                laser_path = os.path.join(dirname, laser_filename)
+                if os.path.isfile(laser_path):
+                    self._laser_path_input.setText(laser_path)
+                    break
+                    
+        elif file_type == 'laser':
+            # Try to extract the base file pattern by removing the laser suffix
+            for suffix in ["_laser_pulses", " laser_pulses", "_laserpulses"]:
+                if suffix in basename:
+                    base_pattern = basename.replace(suffix, "")
+                    break
+            else:
+                # No known suffix found, try to use the filename without extension
+                base_pattern = os.path.splitext(basename)[0]
+            
+            # Set the current file in the input field
+            self._laser_path_input.setText(file_path)
+            
+            # Look for corresponding pulsed and raw files
+            for pulsed_suffix in ["_pulsed_measurement", " pulsed_measurement", "_pulsedmeasurement"]:
+                pulsed_filename = base_pattern + pulsed_suffix + os.path.splitext(basename)[1]
+                pulsed_path = os.path.join(dirname, pulsed_filename)
+                if os.path.isfile(pulsed_path):
+                    self._pulsed_path_input.setText(pulsed_path)
+                    break
+            
+            for raw_suffix in ["_raw_timetrace", " raw_timetrace", "_rawtimetrace"]:
+                raw_filename = base_pattern + raw_suffix + os.path.splitext(basename)[1]
+                raw_path = os.path.join(dirname, raw_filename)
+                if os.path.isfile(raw_path):
+                    self._raw_path_input.setText(raw_path)
+                    break
+
     def open_pulsed_file_dialog(self):
         """Open a file dialog specifically for pulsed measurement data"""
         # Get the initial directory
@@ -475,6 +580,13 @@ class PulsedDataAnalysisGui(GuiBase):
         if file_path:
             # Update default save path
             self._default_save_path = os.path.dirname(file_path)
+            
+            # Update the path in the input field
+            self._pulsed_path_input.setText(file_path)
+            
+            # Auto-detect related files if enabled
+            if self._auto_detect_checkbox.isChecked():
+                self._auto_detect_related_files(file_path, 'pulsed')
             
             # Emit signal to load pulsed file
             self.sigOpenPulsedFile.emit(file_path)
@@ -504,6 +616,13 @@ class PulsedDataAnalysisGui(GuiBase):
             # Update default save path
             self._default_save_path = os.path.dirname(file_path)
             
+            # Update the path in the input field
+            self._raw_path_input.setText(file_path)
+            
+            # Auto-detect related files if enabled
+            if self._auto_detect_checkbox.isChecked():
+                self._auto_detect_related_files(file_path, 'raw')
+            
             # Emit signal to load raw file
             self.sigOpenRawFile.emit(file_path)
             
@@ -532,6 +651,13 @@ class PulsedDataAnalysisGui(GuiBase):
             # Update default save path
             self._default_save_path = os.path.dirname(file_path)
             
+            # Update the path in the input field
+            self._laser_path_input.setText(file_path)
+            
+            # Auto-detect related files if enabled
+            if self._auto_detect_checkbox.isChecked():
+                self._auto_detect_related_files(file_path, 'laser')
+            
             # Emit signal to load laser file
             self.sigOpenLaserFile.emit(file_path)
             
@@ -542,74 +668,120 @@ class PulsedDataAnalysisGui(GuiBase):
             self._update_recent_files_menu()
     
     def load_files_from_inputs(self):
-        """Load files directly from the path inputs to handle problematic filenames"""
+        """Load files directly from the path inputs"""
         successful = False
+        files_to_load = []
         
         # Process pulsed file
         pulsed_path = self._pulsed_path_input.text().strip()
         if pulsed_path:
             if os.path.isfile(pulsed_path):
-                self.sigOpenPulsedFile.emit(pulsed_path)
-                self._mw.statusbar.showMessage(f"Loading pulsed file: {os.path.basename(pulsed_path)}")
-                successful = True
+                files_to_load.append(('pulsed', pulsed_path))
             else:
-                QtWidgets.QMessageBox.warning(
-                    self._mw,
-                    "File Not Found",
-                    f"The pulsed file could not be found at: {pulsed_path}"
-                )
-        
-        # Process raw file
-        raw_path = self._raw_path_input.text().strip()
-        if raw_path:
-            if os.path.isfile(raw_path):
-                self.sigOpenRawFile.emit(raw_path)
-                self._mw.statusbar.showMessage(f"Loading raw file: {os.path.basename(raw_path)}")
-                successful = True
-            else:
-                QtWidgets.QMessageBox.warning(
-                    self._mw,
-                    "File Not Found",
-                    f"The raw file could not be found at: {raw_path}"
-                )
-        
-        # Process laser file
-        laser_path = self._laser_path_input.text().strip()
-        if laser_path:
-            if os.path.isfile(laser_path):
-                self.log.info(f"Loading laser file from direct input: {laser_path}")
-                self.sigOpenLaserFile.emit(laser_path)
-                self._mw.statusbar.showMessage(f"Loading laser file: {os.path.basename(laser_path)}")
-                successful = True
-            else:
-                # If file not found, try auto-correction for space issues
-                directory = os.path.dirname(laser_path)
-                filename = os.path.basename(laser_path)
+                # Try to auto-correct the path
+                directory = os.path.dirname(pulsed_path)
+                filename = os.path.basename(pulsed_path)
                 
-                # Handle the specific pattern we're seeing with spaces in "_IIII laser_pulses.dat"
-                if " laser_pulses" in filename:
-                    corrected_filename = filename.replace(" laser_pulses", "_laser_pulses")
+                # Handle filename with space instead of underscore
+                if " pulsed_measurement" in filename:
+                    corrected_filename = filename.replace(" pulsed_measurement", "_pulsed_measurement")
                     corrected_path = os.path.join(directory, corrected_filename)
-                    self.log.info(f"Trying corrected path for laser file: {corrected_path}")
                     
                     if os.path.isfile(corrected_path):
-                        self.log.info(f"Found laser file at corrected path: {corrected_path}")
-                        self.sigOpenLaserFile.emit(corrected_path)
-                        self._mw.statusbar.showMessage(f"Loading laser file (corrected path): {corrected_filename}")
-                        successful = True
+                        self.log.info(f"Using corrected path for pulsed file: {corrected_path}")
+                        files_to_load.append(('pulsed', corrected_path))
+                        self._pulsed_path_input.setText(corrected_path)
                     else:
                         QtWidgets.QMessageBox.warning(
                             self._mw,
                             "File Not Found",
-                            f"The laser file could not be found at: {laser_path}\n"
-                            f"Also tried corrected path: {corrected_path}"
+                            f"The pulsed file could not be found at:\n{pulsed_path}"
                         )
                 else:
                     QtWidgets.QMessageBox.warning(
                         self._mw,
                         "File Not Found",
-                        f"The laser file could not be found at: {laser_path}"
+                        f"The pulsed file could not be found at:\n{pulsed_path}"
                     )
+        
+        # Process raw file
+        raw_path = self._raw_path_input.text().strip()
+        if raw_path:
+            if os.path.isfile(raw_path):
+                files_to_load.append(('raw', raw_path))
+            else:
+                # Try to auto-correct the path
+                directory = os.path.dirname(raw_path)
+                filename = os.path.basename(raw_path)
+                
+                # Handle filename with space instead of underscore
+                if " raw_timetrace" in filename:
+                    corrected_filename = filename.replace(" raw_timetrace", "_raw_timetrace")
+                    corrected_path = os.path.join(directory, corrected_filename)
+                    
+                    if os.path.isfile(corrected_path):
+                        self.log.info(f"Using corrected path for raw file: {corrected_path}")
+                        files_to_load.append(('raw', corrected_path))
+                        self._raw_path_input.setText(corrected_path)
+                    else:
+                        QtWidgets.QMessageBox.warning(
+                            self._mw,
+                            "File Not Found",
+                            f"The raw timetrace file could not be found at:\n{raw_path}"
+                        )
+                else:
+                    QtWidgets.QMessageBox.warning(
+                        self._mw,
+                        "File Not Found",
+                        f"The raw timetrace file could not be found at:\n{raw_path}"
+                    )
+        
+        # Process laser file
+        laser_path = self._laser_path_input.text().strip()
+        if laser_path:
+            if os.path.isfile(laser_path):
+                files_to_load.append(('laser', laser_path))
+            else:
+                # Try to auto-correct the path
+                directory = os.path.dirname(laser_path)
+                filename = os.path.basename(laser_path)
+                
+                # Handle filename with space instead of underscore
+                if " laser_pulses" in filename:
+                    corrected_filename = filename.replace(" laser_pulses", "_laser_pulses")
+                    corrected_path = os.path.join(directory, corrected_filename)
+                    
+                    if os.path.isfile(corrected_path):
+                        self.log.info(f"Using corrected path for laser file: {corrected_path}")
+                        files_to_load.append(('laser', corrected_path))
+                        self._laser_path_input.setText(corrected_path)
+                    else:
+                        QtWidgets.QMessageBox.warning(
+                            self._mw,
+                            "File Not Found",
+                            f"The laser pulses file could not be found at:\n{laser_path}"
+                        )
+                else:
+                    QtWidgets.QMessageBox.warning(
+                        self._mw,
+                        "File Not Found",
+                        f"The laser pulses file could not be found at:\n{laser_path}"
+                    )
+        
+        # Load all valid files
+        for file_type, file_path in files_to_load:
+            if file_type == 'pulsed':
+                self.sigOpenPulsedFile.emit(file_path)
+                self._mw.statusbar.showMessage(f"Loading pulsed file: {os.path.basename(file_path)}")
+                successful = True
+            elif file_type == 'raw':
+                self.sigOpenRawFile.emit(file_path)
+                self._mw.statusbar.showMessage(f"Loading raw file: {os.path.basename(file_path)}")
+                successful = True
+            elif file_type == 'laser':
+                self.sigOpenLaserFile.emit(file_path)
+                self._mw.statusbar.showMessage(f"Loading laser file: {os.path.basename(file_path)}")
+                successful = True
         
         # Show message if nothing was loaded
         if not successful:
@@ -618,28 +790,49 @@ class PulsedDataAnalysisGui(GuiBase):
                 "No Files Loaded",
                 "No valid file paths were provided. Please enter at least one valid file path."
             )
-        else:
-            # Clear the inputs after successful loading
-            self._pulsed_path_input.clear()
-            self._raw_path_input.clear()
-            self._laser_path_input.clear()
-            
-            # Update recent files menu
-            self._update_recent_files_menu()
+        
+        # Update recent files menu
+        self._update_recent_files_menu()
+        
+        # Return whether loading was successful
+        return successful
     
     def open_recent_file(self, file_path):
         """Open a file from the recent files list"""
         if os.path.isfile(file_path):
-            # Determine file type and emit the appropriate signal
+            # Update the default save path
+            self._default_save_path = os.path.dirname(file_path)
+            
+            # Determine file type and handle accordingly
             basename = os.path.basename(file_path).lower()
-            if "_pulsed_measurement" in basename:
-                self.sigOpenPulsedFile.emit(file_path)
-            elif "_raw_timetrace" in basename:
-                self.sigOpenRawFile.emit(file_path)
-            elif "_laser_pulses" in basename:
-                self.sigOpenLaserFile.emit(file_path)
-            else:
-                # If file type can't be determined from name, show dialog to select type
+            file_type = None
+            
+            # Try to determine file type from filename
+            for suffix in ["_pulsed_measurement", " pulsed_measurement"]:
+                if suffix in basename:
+                    file_type = "pulsed"
+                    # Update the path input
+                    self._pulsed_path_input.setText(file_path)
+                    break
+                    
+            if file_type is None:
+                for suffix in ["_raw_timetrace", " raw_timetrace"]:
+                    if suffix in basename:
+                        file_type = "raw"
+                        # Update the path input
+                        self._raw_path_input.setText(file_path)
+                        break
+                        
+            if file_type is None:
+                for suffix in ["_laser_pulses", " laser_pulses"]:
+                    if suffix in basename:
+                        file_type = "laser"
+                        # Update the path input
+                        self._laser_path_input.setText(file_path)
+                        break
+            
+            # If file type couldn't be determined, ask the user
+            if file_type is None:
                 file_type, ok = QtWidgets.QInputDialog.getItem(
                     self._mw,
                     "Select File Type",
@@ -651,11 +844,32 @@ class PulsedDataAnalysisGui(GuiBase):
                 
                 if ok:
                     if file_type == "Pulsed Measurement":
-                        self.sigOpenPulsedFile.emit(file_path)
+                        file_type = "pulsed"
+                        self._pulsed_path_input.setText(file_path)
                     elif file_type == "Raw Timetrace":
-                        self.sigOpenRawFile.emit(file_path)
+                        file_type = "raw"
+                        self._raw_path_input.setText(file_path)
                     elif file_type == "Laser Pulses":
-                        self.sigOpenLaserFile.emit(file_path)
+                        file_type = "laser"
+                        self._laser_path_input.setText(file_path)
+                else:
+                    # User canceled, do nothing
+                    return
+            
+            # Auto-detect related files if enabled
+            if self._auto_detect_checkbox.isChecked():
+                self._auto_detect_related_files(file_path, file_type)
+            
+            # Emit the appropriate signal to load the file
+            if file_type == "pulsed":
+                self.sigOpenPulsedFile.emit(file_path)
+                self._mw.statusbar.showMessage(f"Loaded pulsed measurement file: {os.path.basename(file_path)}")
+            elif file_type == "raw":
+                self.sigOpenRawFile.emit(file_path)
+                self._mw.statusbar.showMessage(f"Loaded raw timetrace file: {os.path.basename(file_path)}")
+            elif file_type == "laser":
+                self.sigOpenLaserFile.emit(file_path)
+                self._mw.statusbar.showMessage(f"Loaded laser pulses file: {os.path.basename(file_path)}")
         else:
             # File doesn't exist anymore
             QtWidgets.QMessageBox.warning(
